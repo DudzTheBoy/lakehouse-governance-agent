@@ -1,0 +1,17 @@
+# Databricks access. The CLI is the official Go binary (installed separately via
+# winget), not the deprecated `databricks-cli` pip package -- both ship a
+# `databricks` entry point and would shadow each other.
+databricks-sql-connector>=3.4.0
+python-dotenv>=1.0.1
+
+# LLM: descriptions + PII classification.
+groq>=0.11.0
+
+# Synthetic seed data. Nothing here touches a real person's data.
+Faker>=30.0.0
+
+# Report.
+streamlit>=1.38.0
+
+# Tests.
+pytest>=8.3.0
