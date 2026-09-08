@@ -1,4 +1,4 @@
-"""Seed `governance_lab` with a controlled, intentionally messy insurance dataset.
+﻿"""Seed `governance_lab` with a controlled, intentionally messy insurance dataset.
 
 Everything here is self-authored synthetic data (Faker), not a real customer's
 data -- full control over what's dirty and why, which is the point: every finding
@@ -8,10 +8,10 @@ Layout (medallion):
     raw.clientes            customers, with PII columns
     raw.apolices            policies
     raw.sinistros           claims (one suspicious-type column, on purpose)
-    raw.legado_apolices_2019  never read again after creation -> genuine orphan
+    raw.legado_apolices_2017  never read again after creation -> genuine orphan
     silver.apolices_curated  cleaned view of policies, still undocumented
     gold.sinistralidade_mensal  monthly claim-rate rollup
-    staging.import_backup_2026  a stray one-off backup nobody cleaned up
+    staging.import_backup_2024  a stray one-off backup nobody cleaned up
 
 Deliberate dirtiness, one line each:
     - Every table is created with no COMMENT (documentation finding).
@@ -19,7 +19,7 @@ Deliberate dirtiness, one line each:
     - raw.clientes.apelido: 100% NULL column (dead-column finding).
     - raw.apolices.pais: constant 'Brasil' on every row, cardinality 1 (finding).
     - raw.sinistros.valor_sinistro: currency stored as STRING, not DECIMAL (finding).
-    - raw.legado_apolices_2019 and staging.import_backup_2026: created once,
+    - raw.legado_apolices_2017 and staging.import_backup_2024: created once,
       never queried again -> real zero-reads in system.access.audit (finding).
     - No table here is ever OPTIMIZE'd or given an explicit owner (finding).
 
@@ -232,7 +232,7 @@ TABLES = {
         ],
         generator=lambda: gen_sinistros(400, 1200),
     ),
-    f"{CATALOG}.raw.legado_apolices_2019": dict(
+    f"{CATALOG}.raw.legado_apolices_2017": dict(
         ddl="""
             id_apolice BIGINT,
             tipo_seguro STRING,
@@ -245,7 +245,7 @@ TABLES = {
         generator=lambda: gen_legado_apolices(50),
         orphan=True,
     ),
-    f"{CATALOG}.staging.import_backup_2026": dict(
+    f"{CATALOG}.staging.import_backup_2024": dict(
         ddl="""
             id BIGINT,
             nome STRING,
@@ -360,3 +360,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

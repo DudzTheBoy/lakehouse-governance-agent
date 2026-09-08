@@ -1,4 +1,4 @@
-"""Query the catalog the way an analyst would, so orphan detection has a contrast.
+﻿"""Query the catalog the way an analyst would, so orphan detection has a contrast.
 
 Without this every table in `governance_lab` is unread, and "never read in 90 days"
 flags all of them -- true, but useless as a demonstration. This runs plausible
@@ -20,8 +20,8 @@ from dbio import connect
 
 CATALOG = "governance_lab"
 
-# Every table here should read as actively used. The two orphans -- raw.legado_apolices_2019
-# and staging.import_backup_2026 -- are absent on purpose and must stay absent.
+# Every table here should read as actively used. The two orphans -- raw.legado_apolices_2017
+# and staging.import_backup_2024 -- are absent on purpose and must stay absent.
 ANALYST_QUERIES = [
     (
         "monthly claim rate",
@@ -71,11 +71,12 @@ def main() -> None:
                 cursor.execute(query)
                 rows = cursor.fetchall()
                 print(f"  {label}: {len(rows)} row(s)")
-    print("\nDone. These reads are now in the audit pipeline.")
-    print("Wait ~15 minutes, then run `python src/crawler.py` to see the contrast:")
-    print(f"  {CATALOG}.raw.legado_apolices_2019 and {CATALOG}.staging.import_backup_2026")
+    print("\nDone. These statements carry no agent marker, so the crawler counts them")
+    print("as genuine traffic. Run `python src/crawler.py` to see the contrast:")
+    print(f"  {CATALOG}.raw.legado_apolices_2017 and {CATALOG}.staging.import_backup_2024")
     print("  should remain the only tables that were never read.")
 
 
 if __name__ == "__main__":
     main()
+

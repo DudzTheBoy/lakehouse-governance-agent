@@ -66,15 +66,20 @@ TEXTUAL_TYPES = ("string", "varchar", "char")
 SAMPLE_ROWS = 5
 SMALL_FILE_BYTES = 16 * 1024 * 1024
 
-# Unity Catalog writes audit events asynchronously, so an event's `event_time` can
-# land well after the query that caused it. Subtracting the exact scan window is not
-# enough: a scan that ran 19:32:59-19:33:25 produced audit rows stamped 19:34:32+,
-# which then read back as genuine user traffic and marked known-orphan tables as
-# active. The window is padded on both sides to absorb that skew.
-# The cost of padding is that a real read landing minutes after a scan is discarded.
-# For a 90-day orphan threshold that is a rounding error; for a tighter threshold it
-# would not be, and this constant is where you would tighten it.
-SCAN_WINDOW_PADDING = timedelta(minutes=20)
+# Every statement this tool runs against user data carries this marker in a comment,
+# so its own reads can be recognised in `system.query.history` by what they are rather
+# than when they happened.
+#
+# The first attempt subtracted the scan's start/end window from `system.access.audit`.
+# That failed twice. Unity Catalog stamps audit events asynchronously, so the tool's
+# reads landed outside their own window and read back as user traffic; padding the
+# window to absorb the skew then blinded the tool to genuine reads that happened
+# within 20 minutes of a scan -- a simulated analyst session vanished entirely.
+# Time was never the right key. The statement text is.
+#
+# The limitation: matching is by fully-qualified name, so a session that runs
+# `USE CATALOG governance_lab` and then `SELECT * FROM raw.clientes` is not counted.
+AGENT_MARKER = "lakehouse-governance-agent"
 
 
 def cpf_has_valid_check_digits(value: str) -> bool:
@@ -173,38 +178,44 @@ def ensure_meta_tables(cursor, catalog: str) -> None:
     )
 
 
-def previous_scan_windows(cursor, catalog: str) -> list[tuple[datetime, datetime]]:
-    cursor.execute(
-        f"""
-        SELECT started_at, finished_at
-        FROM {catalog}.{META_SCHEMA}.scan_runs
-        WHERE finished_at IS NOT NULL
-        """
-    )
-    return [(row[0], row[1]) for row in cursor.fetchall()]
+def read_query(cursor, statement: str):
+    """Run a statement against user data, marked so the tool can spot its own reads."""
+    return cursor.execute(f"/* {AGENT_MARKER} */ {statement}")
 
 
-def last_read_per_table(cursor, catalog: str, windows: list[tuple[datetime, datetime]]) -> dict:
-    """Last genuine read per table, with this tool's own scans subtracted."""
-    exclusions = " ".join(
-        f"AND NOT (event_time BETWEEN "
-        f"TIMESTAMP'{start - SCAN_WINDOW_PADDING:%Y-%m-%d %H:%M:%S}' AND "
-        f"TIMESTAMP'{end + SCAN_WINDOW_PADDING:%Y-%m-%d %H:%M:%S}')"
-        for start, end in windows
-    )
+def last_read_per_table(cursor, catalog: str, tables: list[dict]) -> dict:
+    """Last read per table by anyone other than this tool.
+
+    One pass over query history: pull every SELECT that mentions the catalog and does
+    not carry the agent marker, then match table names in Python rather than issuing
+    a query per table.
+    """
     cursor.execute(
         f"""
-        SELECT lower(request_params.full_name_arg) AS full_name, max(event_time) AS last_read
-        FROM system.access.audit
-        WHERE action_name IN ('getTable', 'generateTemporaryTableCredential')
-          AND event_date >= current_date() - INTERVAL 365 DAYS
-          AND request_params.full_name_arg IS NOT NULL
-          AND lower(request_params.full_name_arg) LIKE '{catalog.lower()}.%'
-          {exclusions}
-        GROUP BY 1
+        SELECT start_time, lower(statement_text)
+        FROM system.query.history
+        WHERE start_time >= current_timestamp() - INTERVAL 365 DAYS
+          AND statement_type = 'SELECT'
+          AND statement_text ILIKE '%{catalog}%'
+          AND statement_text NOT ILIKE '%{AGENT_MARKER}%'
         """
     )
-    return {row[0]: row[1] for row in cursor.fetchall()}
+    statements = cursor.fetchall()
+
+    reads: dict = {}
+    for table in tables:
+        full_name = f"{catalog}.{table['schema']}.{table['name']}".lower()
+        bare = f"{table['schema']}.{table['name']}".lower()
+        latest = None
+        for start_time, text in statements:
+            # Backticks may sit around any part of the name, so compare on a stripped copy.
+            stripped = text.replace("`", "")
+            if full_name in stripped or bare in stripped:
+                if latest is None or start_time > latest:
+                    latest = start_time
+        if latest:
+            reads[full_name] = latest
+    return reads
 
 
 def list_tables(cursor, catalog: str) -> list[dict]:
@@ -266,7 +277,7 @@ def list_columns(cursor, catalog: str) -> dict:
 def describe_detail(cursor, fqn: str) -> dict:
     """size/file counts for Delta hygiene. Non-Delta relations simply return nothing."""
     try:
-        cursor.execute(f"DESCRIBE DETAIL {fqn}")
+        read_query(cursor, f"DESCRIBE DETAIL {fqn}")
         row = cursor.fetchone().asDict()
         return {"size_bytes": row.get("sizeInBytes"), "num_files": row.get("numFiles")}
     except Exception:
@@ -280,10 +291,10 @@ def profile_table(cursor, fqn: str, columns: list[dict]) -> dict:
         quoted = f"`{column['name']}`"
         aggregates.append(f"count({quoted})")
         aggregates.append(f"approx_count_distinct({quoted})")
-    cursor.execute(f"SELECT {', '.join(aggregates)} FROM {fqn}")
+    read_query(cursor, f"SELECT {', '.join(aggregates)} FROM {fqn}")
     stats = list(cursor.fetchone())
 
-    cursor.execute(f"SELECT * FROM {fqn} LIMIT {SAMPLE_ROWS}")
+    read_query(cursor, f"SELECT * FROM {fqn} LIMIT {SAMPLE_ROWS}")
     sample_rows = [list(row) for row in cursor.fetchall()]
 
     row_count = stats[0]
@@ -310,15 +321,15 @@ def crawl(catalog: str) -> None:
         with connection.cursor() as cursor:
             ensure_meta_tables(cursor, catalog)
 
-            # Step 1, before touching any data: read the audit log with this tool's
-            # own past scan windows subtracted, so we measure other people's reads.
-            windows = previous_scan_windows(cursor, catalog)
-            reads = last_read_per_table(cursor, catalog, windows)
-            print(f"  audit snapshot taken ({len(windows)} prior scan windows excluded)")
-
             tables = list_tables(cursor, catalog)
             columns_by_table = list_columns(cursor, catalog)
             print(f"  {len(tables)} tables in scope (internal backing tables filtered out)")
+
+            # Before touching any data: who else has read these tables? Statements
+            # carrying this tool's marker are excluded, so profiling cannot make a
+            # table look used.
+            reads = last_read_per_table(cursor, catalog, tables)
+            print(f"  read history: {len(reads)} of {len(tables)} tables read by someone else")
 
             table_rows, column_rows = [], []
             scanned_at = datetime.now(timezone.utc).replace(tzinfo=None)
