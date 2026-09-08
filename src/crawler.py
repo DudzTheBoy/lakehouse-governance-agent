@@ -28,7 +28,7 @@ Run:
 import argparse
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from dbio import batched_insert, connect
 
@@ -65,6 +65,16 @@ TEXTUAL_TYPES = ("string", "varchar", "char")
 
 SAMPLE_ROWS = 5
 SMALL_FILE_BYTES = 16 * 1024 * 1024
+
+# Unity Catalog writes audit events asynchronously, so an event's `event_time` can
+# land well after the query that caused it. Subtracting the exact scan window is not
+# enough: a scan that ran 19:32:59-19:33:25 produced audit rows stamped 19:34:32+,
+# which then read back as genuine user traffic and marked known-orphan tables as
+# active. The window is padded on both sides to absorb that skew.
+# The cost of padding is that a real read landing minutes after a scan is discarded.
+# For a 90-day orphan threshold that is a rounding error; for a tighter threshold it
+# would not be, and this constant is where you would tighten it.
+SCAN_WINDOW_PADDING = timedelta(minutes=20)
 
 
 def cpf_has_valid_check_digits(value: str) -> bool:
@@ -177,8 +187,9 @@ def previous_scan_windows(cursor, catalog: str) -> list[tuple[datetime, datetime
 def last_read_per_table(cursor, catalog: str, windows: list[tuple[datetime, datetime]]) -> dict:
     """Last genuine read per table, with this tool's own scans subtracted."""
     exclusions = " ".join(
-        f"AND NOT (event_time BETWEEN TIMESTAMP'{start:%Y-%m-%d %H:%M:%S}' "
-        f"AND TIMESTAMP'{end:%Y-%m-%d %H:%M:%S}')"
+        f"AND NOT (event_time BETWEEN "
+        f"TIMESTAMP'{start - SCAN_WINDOW_PADDING:%Y-%m-%d %H:%M:%S}' AND "
+        f"TIMESTAMP'{end + SCAN_WINDOW_PADDING:%Y-%m-%d %H:%M:%S}')"
         for start, end in windows
     )
     cursor.execute(

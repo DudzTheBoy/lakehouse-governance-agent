@@ -152,6 +152,32 @@ def gen_import_backup(n: int) -> list[tuple]:
     return rows
 
 
+def gen_cad_gen(n: int) -> list[tuple]:
+    """The same personal data as raw.clientes, behind meaningless column names.
+
+    This is the control case for pattern-vs-LLM detection. Name-based rules find
+    nothing here; value-based rules still catch CPF, email and phone because those
+    have a shape. Nothing catches a person's name or a date-as-text except a reader
+    that understands the values -- which is the only place the model can earn its
+    cost. Dates are stored as text on purpose so value sniffing is allowed to try.
+    """
+    rows = []
+    for i in range(1, n + 1):
+        rows.append(
+            (
+                i,
+                fake.name(),
+                fake_cpf(),
+                fake.email(),
+                fake.msisdn()[:11],
+                random_date(date(1950, 1, 1), date(2005, 12, 31)).isoformat(),
+                fake.city(),
+                round(random.uniform(400, 6000), 2),
+            )
+        )
+    return rows
+
+
 TABLES = {
     f"{CATALOG}.raw.clientes": dict(
         ddl="""
@@ -229,6 +255,22 @@ TABLES = {
         columns=["id", "nome", "email", "nota"],
         generator=lambda: gen_import_backup(20),
         orphan=True,
+    ),
+    # Kept last on purpose: generators share one seeded random stream, so inserting
+    # a table above this line would change the data in every table after it.
+    f"{CATALOG}.staging.cad_gen_2021": dict(
+        ddl="""
+            id BIGINT,
+            f_01 STRING,
+            f_02 STRING,
+            f_03 STRING,
+            f_04 STRING,
+            f_05 STRING,
+            f_06 STRING,
+            vl_x DOUBLE
+        """,
+        columns=["id", "f_01", "f_02", "f_03", "f_04", "f_05", "f_06", "vl_x"],
+        generator=lambda: gen_cad_gen(300),
     ),
 }
 
