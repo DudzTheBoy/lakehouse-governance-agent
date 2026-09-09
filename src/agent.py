@@ -37,6 +37,7 @@ from datetime import datetime, timezone
 from groq import Groq
 
 from dbio import batched_insert, connect, load_env, sql_literal
+from docs_index import DocsIndex
 
 DEFAULT_CATALOG = "governance_lab"
 META_SCHEMA = "meta"
@@ -59,9 +60,16 @@ amount stored as a string).
 Some columns are marked SENSITIVE: their values were withheld on purpose. Classify them
 from the name and type alone.
 
+You may be given SOURCE DOCUMENTATION for the system the table came from. When it
+covers a column, follow it over your own reading of the name and values -- it is the
+system of record for what the column means. Say so plainly rather than hedging. When
+it does not cover a column, fall back to the name, type and samples as usual, and do
+not stretch the documentation to fit.
+
 Return JSON only:
 {"table_description": "...",
- "columns": [{"name": "...", "description": "...", "pii": "...", "type_looks_wrong": true|false}]}"""
+ "columns": [{"name": "...", "description": "...", "pii": "...", "type_looks_wrong": true|false,
+              "grounded_in_docs": true|false}]}"""
 
 
 def price_per_mtok(name: str) -> float | None:
@@ -81,10 +89,23 @@ def ensure_meta_tables(cursor, catalog: str) -> None:
             suggested_comment STRING,
             pii_by_regex STRING, pii_by_llm STRING, pii_agreement STRING,
             type_looks_wrong BOOLEAN, values_withheld BOOLEAN,
-            applied BOOLEAN
+            applied BOOLEAN,
+            doc_system STRING, doc_citations STRING, doc_matched_terms STRING,
+            grounded_in_docs BOOLEAN
         ) USING DELTA
         """
     )
+    # Tables created before grounding existed need the new columns added in place.
+    for column, dtype in (
+        ("doc_system", "STRING"), ("doc_citations", "STRING"),
+        ("doc_matched_terms", "STRING"), ("grounded_in_docs", "BOOLEAN"),
+    ):
+        try:
+            cursor.execute(
+                f"ALTER TABLE {catalog}.{META_SCHEMA}.llm_suggestions ADD COLUMN {column} {dtype}"
+            )
+        except Exception:
+            pass  # already present
     cursor.execute(
         f"""
         CREATE TABLE IF NOT EXISTS {catalog}.{META_SCHEMA}.llm_runs (
@@ -144,8 +165,17 @@ def load_scan(cursor, catalog: str, scan_id: str) -> dict:
     return tables
 
 
-def build_prompt(table: dict) -> str:
-    lines = [f"Table: {table['schema']}.{table['name']} ({table['table_type']})", "Columns:"]
+def build_prompt(table: dict, grounding: dict | None) -> str:
+    lines = []
+    if grounding:
+        lines += [
+            f"SOURCE DOCUMENTATION ({grounding['system']}):",
+            grounding["context"],
+            "",
+            "END OF DOCUMENTATION.",
+            "",
+        ]
+    lines += [f"Table: {table['schema']}.{table['name']} ({table['table_type']})", "Columns:"]
     for column in table["columns"]:
         stats = (
             f"{column['row_count']} rows, {column['null_count']} nulls, "
@@ -162,12 +192,12 @@ def build_prompt(table: dict) -> str:
     return "\n".join(lines)
 
 
-def describe_table(client: Groq, model: str, table: dict) -> tuple[dict, int, int]:
+def describe_table(client: Groq, model: str, table: dict, grounding: dict | None) -> tuple[dict, int, int]:
     response = client.chat.completions.create(
         model=model,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": build_prompt(table)},
+            {"role": "user", "content": build_prompt(table, grounding)},
         ],
         response_format={"type": "json_object"},
         max_completion_tokens=8192,
@@ -210,18 +240,23 @@ def comment_statements(catalog: str, table: dict, described: dict) -> list[str]:
     return statements
 
 
-def run(catalog: str, apply: bool) -> None:
+def run(catalog: str, apply: bool, use_docs: bool) -> None:
     load_env()
     model = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
     client = Groq(api_key=os.environ["GROQ_API_KEY"])
+    docs = DocsIndex() if use_docs else None
 
     run_id = str(uuid.uuid4())
     started_at = datetime.now(timezone.utc).replace(tzinfo=None)
     prompt_tokens = completion_tokens = 0
     suggestion_rows: list[tuple] = []
-    documented = 0
+    documented = grounded_tables = 0
 
     print(f"run {run_id}  model={model}  mode={'APPLY' if apply else 'DRY RUN'}")
+    if docs:
+        print(f"  grounding: {docs.total_chunks} doc chunks across {len(docs.chunks)} system(s)")
+    else:
+        print("  grounding: off")
 
     with connect() as connection:
         with connection.cursor() as cursor:
@@ -231,7 +266,18 @@ def run(catalog: str, apply: bool) -> None:
             print(f"  scan {scan_id}: {len(tables)} tables\n")
 
             for table in tables.values():
-                described, used_prompt, used_completion = describe_table(client, model, table)
+                grounding = None
+                if docs:
+                    grounding = docs.retrieve(
+                        table["schema"], table["name"],
+                        [c["name"] for c in table["columns"]],
+                    )
+                    if grounding:
+                        grounded_tables += 1
+
+                described, used_prompt, used_completion = describe_table(
+                    client, model, table, grounding
+                )
                 prompt_tokens += used_prompt
                 completion_tokens += used_completion
 
@@ -262,6 +308,10 @@ def run(catalog: str, apply: bool) -> None:
                             bool(suggestion.get("type_looks_wrong")),
                             bool(column["is_pii_candidate"]),
                             bool(will_apply and not column["has_comment"]),
+                            grounding["system"] if grounding else None,
+                            "; ".join(grounding["citations"]) if grounding else None,
+                            ", ".join(grounding["matched_terms"]) if grounding else None,
+                            bool(suggestion.get("grounded_in_docs")) if grounding else False,
                         )
                     )
 
@@ -272,6 +322,7 @@ def run(catalog: str, apply: bool) -> None:
                     "table_schema", "table_name", "column_name", "suggested_comment",
                     "pii_by_regex", "pii_by_llm", "pii_agreement",
                     "type_looks_wrong", "values_withheld", "applied",
+                    "doc_system", "doc_citations", "doc_matched_terms", "grounded_in_docs",
                 ],
                 suggestion_rows,
             )
@@ -296,6 +347,8 @@ def run(catalog: str, apply: bool) -> None:
 
     elapsed = (finished_at - started_at).total_seconds()
     print(f"\n  {len(tables)} tables, {documented} comments {'written' if apply else 'staged'}")
+    if docs:
+        print(f"  {grounded_tables} of {len(tables)} tables had source documentation")
     print(f"  tokens: {prompt_tokens} in / {completion_tokens} out  in {elapsed:.1f}s")
     if cost is not None:
         print(f"  estimated cost: ${cost:.4f}")
@@ -309,8 +362,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--catalog", default=DEFAULT_CATALOG)
     parser.add_argument("--apply", action="store_true", help="execute the statements instead of printing them")
+    parser.add_argument("--no-docs", action="store_true",
+                        help="skip source documentation, to measure what grounding is worth")
     args = parser.parse_args()
-    run(args.catalog, args.apply)
+    run(args.catalog, args.apply, use_docs=not args.no_docs)
 
 
 if __name__ == "__main__":

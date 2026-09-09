@@ -1,0 +1,17 @@
+{
+  "_comment": [
+    "Maps tables to the system they came from. First match wins, so put specific",
+    "patterns above general ones. '*' is the only wildcard.",
+    "Each 'system' needs a matching docs/sources/<system>.md file.",
+    "To ground on a vendor's documentation, save the relevant pages as Markdown",
+    "under docs/sources/ -- pinning the version you documented against beats",
+    "following a URL that changes underneath you."
+  ],
+  "mappings": [
+    { "match": "raw_genesys.*", "system": "genesys_cloud" },
+    { "match": "staging.*", "system": "legacy_crm" },
+    { "match": "raw.*", "system": "seguracore" },
+    { "match": "silver.*", "system": "seguracore" },
+    { "match": "gold.*", "system": "seguracore" }
+  ]
+}

@@ -28,6 +28,7 @@ Run:
 """
 
 import random
+import uuid
 from datetime import date, timedelta
 
 from faker import Faker
@@ -178,6 +179,70 @@ def gen_cad_gen(n: int) -> list[tuple]:
     return rows
 
 
+MEDIA_TYPES = ["voice", "chat", "email", "callback"]
+DIRECTIONS = ["inbound", "outbound"]
+PURPOSES = ["customer", "agent", "acd", "ivr"]
+WRAPUP_CODES = ["RESOLVED", "ESCALATED", "NO_ANSWER", "CALLBACK_SCHEDULED", "WRONG_NUMBER"]
+QUEUE_NAMES = ["Suporte_N1", "Suporte_N2", "Retencao", "Vendas", "Cobranca"]
+
+
+def gen_genesys_conversations(n: int) -> list[tuple]:
+    """Contact-centre interaction records using Genesys Cloud field names.
+
+    The point of this table is that nothing about it is guessable. `tAcw` is not a
+    typo, `nOffered` is not a null count, and every t-prefixed duration is in
+    milliseconds -- which is the single most expensive assumption to get wrong,
+    because dividing by sixty instead of sixty thousand still produces a plausible
+    looking number. No profiler recovers that. The vendor's documentation does.
+    """
+    rows = []
+    for i in range(1, n + 1):
+        start = random_date(date(2026, 1, 1), date(2026, 8, 31))
+        talk = random.randint(15_000, 900_000)
+        rows.append(
+            (
+                str(uuid.UUID(int=random.getrandbits(128), version=4)),
+                str(uuid.UUID(int=random.getrandbits(128), version=4)),
+                str(uuid.UUID(int=random.getrandbits(128), version=4)),
+                random.choice(MEDIA_TYPES),
+                random.choice(DIRECTIONS),
+                random.choice(PURPOSES),
+                f"queue-{random.randint(1, 5):03d}",
+                random.choice(WRAPUP_CODES),
+                random.randint(500, 120_000),
+                talk,
+                random.randint(0, 180_000),
+                random.randint(5_000, 240_000),
+                start,
+            )
+        )
+    return rows
+
+
+def gen_genesys_queue_metrics(n: int) -> list[tuple]:
+    rows = []
+    for i in range(1, n + 1):
+        offered = random.randint(50, 900)
+        answered = int(offered * random.uniform(0.7, 0.98))
+        abandoned = offered - answered
+        rows.append(
+            (
+                f"queue-{random.randint(1, 5):03d}",
+                random.choice(QUEUE_NAMES),
+                random_date(date(2026, 1, 1), date(2026, 8, 31)),
+                offered,
+                answered,
+                abandoned,
+                random.randint(0, max(answered // 10, 1)),
+                random.randint(2_000, 60_000),
+                random.randint(1_000, 90_000),
+                random.randint(30_000, 600_000),
+                round(random.uniform(0.55, 0.99), 4),
+            )
+        )
+    return rows
+
+
 TABLES = {
     f"{CATALOG}.raw.clientes": dict(
         ddl="""
@@ -272,12 +337,56 @@ TABLES = {
         columns=["id", "f_01", "f_02", "f_03", "f_04", "f_05", "f_06", "vl_x"],
         generator=lambda: gen_cad_gen(300),
     ),
+    f"{CATALOG}.raw_genesys.conversation_details": dict(
+        ddl="""
+            conversationId STRING,
+            participantId STRING,
+            sessionId STRING,
+            mediaType STRING,
+            direction STRING,
+            purpose STRING,
+            queueId STRING,
+            wrapUpCode STRING,
+            tAnswered BIGINT,
+            tTalk BIGINT,
+            tHeld BIGINT,
+            tAcw BIGINT,
+            conversationStart DATE
+        """,
+        columns=[
+            "conversationId", "participantId", "sessionId", "mediaType", "direction",
+            "purpose", "queueId", "wrapUpCode", "tAnswered", "tTalk", "tHeld", "tAcw",
+            "conversationStart",
+        ],
+        generator=lambda: gen_genesys_conversations(800),
+    ),
+    f"{CATALOG}.raw_genesys.queue_daily_metrics": dict(
+        ddl="""
+            queueId STRING,
+            queueName STRING,
+            intervalDate DATE,
+            nOffered BIGINT,
+            nAnswered BIGINT,
+            nAbandoned BIGINT,
+            nTransferred BIGINT,
+            tAnswered BIGINT,
+            tAbandon BIGINT,
+            tHandle BIGINT,
+            oServiceLevel DOUBLE
+        """,
+        columns=[
+            "queueId", "queueName", "intervalDate", "nOffered", "nAnswered",
+            "nAbandoned", "nTransferred", "tAnswered", "tAbandon", "tHandle",
+            "oServiceLevel",
+        ],
+        generator=lambda: gen_genesys_queue_metrics(240),
+    ),
 }
 
 
 def create_schemas(cursor) -> None:
     cursor.execute(f"CREATE CATALOG IF NOT EXISTS {CATALOG}")
-    for schema in ("raw", "silver", "gold", "staging"):
+    for schema in ("raw", "raw_genesys", "silver", "gold", "staging"):
         cursor.execute(f"CREATE SCHEMA IF NOT EXISTS {CATALOG}.{schema}")
 
 
