@@ -218,7 +218,8 @@ def last_read_per_table(cursor, catalog: str, tables: list[dict]) -> dict:
     return reads
 
 
-def list_tables(cursor, catalog: str) -> list[dict]:
+def list_tables(cursor, catalog: str, schema: str | None = None) -> list[dict]:
+    schema_filter = f"AND table_schema = '{schema}'" if schema else ""
     cursor.execute(
         f"""
         SELECT table_schema, table_name, table_type, table_owner,
@@ -226,6 +227,7 @@ def list_tables(cursor, catalog: str) -> list[dict]:
         FROM system.information_schema.tables
         WHERE table_catalog = '{catalog}'
           AND table_schema NOT IN ('information_schema', '{META_SCHEMA}')
+          {schema_filter}
         ORDER BY table_schema, table_name
         """
     )
@@ -274,6 +276,33 @@ def list_columns(cursor, catalog: str) -> dict:
     return columns
 
 
+def describe_columns(cursor, fqn: str) -> list[dict]:
+    """Column metadata for catalogs whose information_schema.columns is empty.
+
+    Shared catalogs -- Databricks' own `samples` among them -- expose tables through
+    information_schema.tables but populate no rows in information_schema.columns.
+    A governance tool that only reads information_schema reports those catalogs as
+    having no columns at all, which is worse than failing, because it looks like a
+    clean result. DESCRIBE works everywhere the table is readable.
+    """
+    read_query(cursor, f"DESCRIBE TABLE {fqn}")
+    columns = []
+    for position, row in enumerate(cursor.fetchall(), start=1):
+        name = (row[0] or "").strip()
+        # DESCRIBE appends a blank separator and then partition/detail sections.
+        if not name or name.startswith("#"):
+            break
+        columns.append(
+            {
+                "name": name,
+                "position": position,
+                "data_type": (row[1] or "").strip(),
+                "comment": row[2] if len(row) > 2 else None,
+            }
+        )
+    return columns
+
+
 def describe_detail(cursor, fqn: str) -> dict:
     """size/file counts for Delta hygiene. Non-Delta relations simply return nothing."""
     try:
@@ -312,16 +341,19 @@ def profile_table(cursor, fqn: str, columns: list[dict]) -> dict:
     return profile
 
 
-def crawl(catalog: str) -> None:
+def crawl(catalog: str, meta_catalog: str | None = None, schema: str | None = None) -> None:
+    # A governance tool has to be able to audit a catalog it cannot write to, so the
+    # inventory lands wherever it is allowed to, not necessarily beside the data.
+    meta_catalog = meta_catalog or catalog
     scan_id = str(uuid.uuid4())
     started_at = datetime.now(timezone.utc).replace(tzinfo=None)
-    print(f"scan {scan_id} on `{catalog}`")
+    print(f"scan {scan_id} on `{catalog}` (inventory -> `{meta_catalog}.{META_SCHEMA}`)")
 
     with connect() as connection:
         with connection.cursor() as cursor:
-            ensure_meta_tables(cursor, catalog)
+            ensure_meta_tables(cursor, meta_catalog)
 
-            tables = list_tables(cursor, catalog)
+            tables = list_tables(cursor, catalog, schema)
             columns_by_table = list_columns(cursor, catalog)
             print(f"  {len(tables)} tables in scope (internal backing tables filtered out)")
 
@@ -338,6 +370,8 @@ def crawl(catalog: str) -> None:
                 fqn = f"`{catalog}`.`{table['schema']}`.`{table['name']}`"
                 full_name = f"{catalog}.{table['schema']}.{table['name']}".lower()
                 columns = columns_by_table.get((table["schema"], table["name"]), [])
+                if not columns:
+                    columns = describe_columns(cursor, fqn)
 
                 detail = describe_detail(cursor, fqn)
                 profile = profile_table(cursor, fqn, columns)
@@ -395,7 +429,7 @@ def crawl(catalog: str) -> None:
                 )
 
             batched_insert(
-                cursor, f"{catalog}.{META_SCHEMA}.table_inventory",
+                cursor, f"{meta_catalog}.{META_SCHEMA}.table_inventory",
                 [
                     "scan_id", "scanned_at", "table_catalog", "table_schema", "table_name",
                     "table_type", "is_writable", "table_owner", "created_at", "last_altered",
@@ -405,7 +439,7 @@ def crawl(catalog: str) -> None:
                 table_rows,
             )
             batched_insert(
-                cursor, f"{catalog}.{META_SCHEMA}.column_profile",
+                cursor, f"{meta_catalog}.{META_SCHEMA}.column_profile",
                 [
                     "scan_id", "scanned_at", "table_catalog", "table_schema", "table_name",
                     "column_name", "ordinal_position", "data_type", "column_comment",
@@ -418,7 +452,7 @@ def crawl(catalog: str) -> None:
 
             finished_at = datetime.now(timezone.utc).replace(tzinfo=None)
             batched_insert(
-                cursor, f"{catalog}.{META_SCHEMA}.scan_runs",
+                cursor, f"{meta_catalog}.{META_SCHEMA}.scan_runs",
                 ["scan_id", "started_at", "finished_at", "catalog"],
                 [(scan_id, started_at, finished_at, catalog)],
             )
@@ -431,7 +465,11 @@ def crawl(catalog: str) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--catalog", default=DEFAULT_CATALOG)
-    crawl(parser.parse_args().catalog)
+    parser.add_argument("--schema", default=None, help="limit the scan to one schema")
+    parser.add_argument("--meta-catalog", default=None,
+                        help="where to write the inventory, when the audited catalog is read-only")
+    args = parser.parse_args()
+    crawl(args.catalog, args.meta_catalog, args.schema)
 
 
 if __name__ == "__main__":

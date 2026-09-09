@@ -1,4 +1,4 @@
-"""Generate table and column documentation with an LLM, and classify PII.
+﻿"""Generate table and column documentation with an LLM, and classify PII.
 
 Reads the newest crawl from `meta.column_profile`, asks the model to describe every
 undocumented column, and records what it would write. Nothing touches the catalog
@@ -240,8 +240,9 @@ def comment_statements(catalog: str, table: dict, described: dict) -> list[str]:
     return statements
 
 
-def run(catalog: str, apply: bool, use_docs: bool) -> None:
+def run(catalog: str, apply: bool, use_docs: bool, meta_catalog: str | None = None) -> None:
     load_env()
+    meta_catalog = meta_catalog or catalog
     model = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
     client = Groq(api_key=os.environ["GROQ_API_KEY"])
     docs = DocsIndex() if use_docs else None
@@ -260,9 +261,9 @@ def run(catalog: str, apply: bool, use_docs: bool) -> None:
 
     with connect() as connection:
         with connection.cursor() as cursor:
-            ensure_meta_tables(cursor, catalog)
-            scan_id = latest_scan_id(cursor, catalog)
-            tables = load_scan(cursor, catalog, scan_id)
+            ensure_meta_tables(cursor, meta_catalog)
+            scan_id = latest_scan_id(cursor, meta_catalog)
+            tables = load_scan(cursor, meta_catalog, scan_id)
             print(f"  scan {scan_id}: {len(tables)} tables\n")
 
             for table in tables.values():
@@ -316,7 +317,7 @@ def run(catalog: str, apply: bool, use_docs: bool) -> None:
                     )
 
             batched_insert(
-                cursor, f"{catalog}.{META_SCHEMA}.llm_suggestions",
+                cursor, f"{meta_catalog}.{META_SCHEMA}.llm_suggestions",
                 [
                     "run_id", "scan_id", "generated_at", "model",
                     "table_schema", "table_name", "column_name", "suggested_comment",
@@ -335,7 +336,7 @@ def run(catalog: str, apply: bool, use_docs: bool) -> None:
 
             finished_at = datetime.now(timezone.utc).replace(tzinfo=None)
             batched_insert(
-                cursor, f"{catalog}.{META_SCHEMA}.llm_runs",
+                cursor, f"{meta_catalog}.{META_SCHEMA}.llm_runs",
                 [
                     "run_id", "scan_id", "started_at", "finished_at", "model",
                     "tables_processed", "columns_documented",
@@ -364,9 +365,13 @@ def main() -> None:
     parser.add_argument("--apply", action="store_true", help="execute the statements instead of printing them")
     parser.add_argument("--no-docs", action="store_true",
                         help="skip source documentation, to measure what grounding is worth")
+    parser.add_argument("--meta-catalog", default=None,
+                        help="where the inventory lives, when the audited catalog is read-only")
     args = parser.parse_args()
-    run(args.catalog, args.apply, use_docs=not args.no_docs)
+    run(args.catalog, args.apply, use_docs=not args.no_docs, meta_catalog=args.meta_catalog)
 
 
 if __name__ == "__main__":
     main()
+
+

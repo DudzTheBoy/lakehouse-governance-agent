@@ -1,4 +1,4 @@
-"""Run the agent twice -- without and with source documentation -- and diff the output.
+﻿"""Run the agent twice -- without and with source documentation -- and diff the output.
 
 This is the experiment the project exists to run. Databricks generates table comments
 natively from the data itself, and so does this agent when it has nothing else. The
@@ -55,20 +55,22 @@ def main() -> None:
     parser.add_argument("--catalog", default=DEFAULT_CATALOG)
     parser.add_argument("--schema", default="raw_genesys",
                         help="schema to compare; omit to compare the whole catalog")
+    parser.add_argument("--meta-catalog", default=None)
     parser.add_argument("--out", default=str(REPO_ROOT / "out" / "grounding_comparison.md"))
     args = parser.parse_args()
 
     print("=== pass 1: no source documentation ===")
-    run_agent(args.catalog, apply=False, use_docs=False)
+    run_agent(args.catalog, apply=False, use_docs=False, meta_catalog=args.meta_catalog)
     print("\n=== pass 2: with source documentation ===")
-    run_agent(args.catalog, apply=False, use_docs=True)
+    run_agent(args.catalog, apply=False, use_docs=True, meta_catalog=args.meta_catalog)
 
     with connect() as connection:
         with connection.cursor() as cursor:
-            grounded_run = fetch_run(cursor, args.catalog, 0)
-            plain_run = fetch_run(cursor, args.catalog, 1)
-            grounded = descriptions(cursor, args.catalog, grounded_run, args.schema)
-            plain = descriptions(cursor, args.catalog, plain_run, args.schema)
+            meta = args.meta_catalog or args.catalog
+            grounded_run = fetch_run(cursor, meta, 0)
+            plain_run = fetch_run(cursor, meta, 1)
+            grounded = descriptions(cursor, meta, grounded_run, args.schema)
+            plain = descriptions(cursor, meta, plain_run, args.schema)
 
     changed = [key for key in grounded if key in plain
                and (grounded[key][3] or "").strip() != (plain[key][3] or "").strip()]
@@ -101,7 +103,7 @@ def main() -> None:
         for key in keys:
             without = (plain.get(key, (None,) * 4)[3] or "-").replace("|", "\\|")
             with_docs = (grounded[key][3] or "-").replace("|", "\\|")
-            marker = " **←**" if key in changed else ""
+            marker = " **[changed]**" if key in changed else ""
             lines.append(f"| `{key[2]}` | {without} | {with_docs}{marker} |")
         lines.append("")
 
@@ -114,3 +116,5 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+

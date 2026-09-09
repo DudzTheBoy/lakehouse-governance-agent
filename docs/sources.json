@@ -8,6 +8,7 @@
     "following a URL that changes underneath you."
   ],
   "mappings": [
+    { "match": "tpch.*", "system": "tpch_spec" },
     { "match": "raw_genesys.*", "system": "genesys_cloud" },
     { "match": "staging.*", "system": "legacy_crm" },
     { "match": "raw.*", "system": "seguracore" },
