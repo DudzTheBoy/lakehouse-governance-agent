@@ -62,9 +62,18 @@ from the name and type alone.
 
 You may be given SOURCE DOCUMENTATION for the system the table came from. When it
 covers a column, follow it over your own reading of the name and values -- it is the
-system of record for what the column means. Say so plainly rather than hedging. When
-it does not cover a column, fall back to the name, type and samples as usual, and do
-not stretch the documentation to fit.
+system of record for what the column means. When it does not cover a column, fall
+back to the name, type and samples as usual, and do not stretch the documentation to
+fit.
+
+When the documentation states HOW a value is derived, or what specific coded values
+mean, your description must carry that rule. Do not replace it with a conventional
+reading. If the documentation says a flag is set to one letter under a stated
+condition and another letter otherwise, state the condition. Writing "O for open,
+F for final" when the documentation says "O if the ship date is in the future, F
+otherwise" is a failure: you had the rule and discarded it for a familiar guess.
+A description that repeats what a reader already assumed adds nothing; the whole
+value of the documentation is the part that is not guessable.
 
 Return JSON only:
 {"table_description": "...",
