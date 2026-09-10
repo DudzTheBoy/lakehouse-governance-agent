@@ -617,18 +617,18 @@ body::after {
 
 .rig { transform-box: fill-box; transform-origin: 50% 100%; }
 .limb { transform-box: fill-box; }
-.arm-l, .arm-r { transform-origin: 50% 8%; }
-.leg-l, .leg-r { transform-origin: 50% 6%; }
-.head { transform-origin: 50% 88%; }
+.arm-l, .arm-r { transform-origin: 50% 10%; }
+.leg-l, .leg-r { transform-origin: 50% 7%; }
+.head { transform-origin: 50% 96%; }
 
-@keyframes swingA { 0%,100% { transform: rotate(21deg); } 50% { transform: rotate(-21deg); } }
-@keyframes swingB { 0%,100% { transform: rotate(-21deg); } 50% { transform: rotate(21deg); } }
-@keyframes armA   { 0%,100% { transform: rotate(-16deg); } 50% { transform: rotate(16deg); } }
-@keyframes armB   { 0%,100% { transform: rotate(16deg); } 50% { transform: rotate(-16deg); } }
+@keyframes stepA { 0%,100% { transform: translateY(0) rotate(3deg); } 50% { transform: translateY(-3.4px) rotate(-3deg); } }
+@keyframes stepB { 0%,100% { transform: translateY(-3.4px) rotate(-3deg); } 50% { transform: translateY(0) rotate(3deg); } }
+@keyframes armA   { 0%,100% { transform: rotate(-9deg); } 50% { transform: rotate(9deg); } }
+@keyframes armB   { 0%,100% { transform: rotate(9deg); } 50% { transform: rotate(-9deg); } }
 @keyframes bob    { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-1.6px); } }
 
-.walk .leg-l { animation: swingA .68s ease-in-out infinite; }
-.walk .leg-r { animation: swingB .68s ease-in-out infinite; }
+.walk .leg-l { animation: stepA .68s ease-in-out infinite; }
+.walk .leg-r { animation: stepB .68s ease-in-out infinite; }
 .walk .arm-l { animation: armB .68s ease-in-out infinite; }
 .walk .arm-r { animation: armA .68s ease-in-out infinite; }
 .walk .rig   { animation: bob .34s ease-in-out infinite; }
@@ -638,15 +638,15 @@ body::after {
   52% { transform: translateY(-46px); } 100% { transform: translateY(0); }
 }
 @keyframes tuck { 0%,100% { transform: rotate(0); } 40% { transform: rotate(34deg); } }
-@keyframes reach { 0%,100% { transform: rotate(0); } 40% { transform: rotate(-128deg); } }
+@keyframes reach { 0%,100% { transform: rotate(0); } 40% { transform: rotate(-118deg); } }
 .hop .rig { animation: hop 1.5s cubic-bezier(.34,0,.28,1); }
 .hop .leg-l, .hop .leg-r { animation: tuck 1.5s cubic-bezier(.34,0,.28,1); }
 .hop .arm-l, .hop .arm-r { animation: reach 1.5s cubic-bezier(.34,0,.28,1); }
 
-@keyframes waving { 0%,100% { transform: rotate(-136deg); } 50% { transform: rotate(-98deg); } }
+@keyframes waving { 0%,100% { transform: rotate(-128deg); } 50% { transform: rotate(-92deg); } }
 .wave .arm-r { animation: waving .46s ease-in-out 5; }
 
-@keyframes peek { 0%,100% { transform: rotate(0); } 25% { transform: rotate(-11deg); } 75% { transform: rotate(11deg); } }
+@keyframes peek { 0%,100% { transform: rotate(0); } 25% { transform: rotate(-6deg); } 75% { transform: rotate(6deg); } }
 .look .head { animation: peek 2.6s ease-in-out; }
 
 @keyframes breathe { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-1.1px); } }
@@ -703,37 +703,6 @@ body::after {
 .suggest button.facet { border-style: dashed; }
 .mission .answer { max-width: 660px; margin: 20px auto 0; }
 
-/* the ask panel */
-.ask {
-  display: flex; gap: 16px; align-items: flex-start;
-  background: linear-gradient(180deg, rgba(36,39,46,.75), rgba(26,28,33,.75));
-  border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; margin: 0 0 26px;
-}
-.ask .naut { flex: none; width: 62px; height: 62px; animation: float 5.5s ease-in-out infinite; }
-@keyframes float { 0%,100% { transform: translateY(0) rotate(-3deg); } 50% { transform: translateY(-7px) rotate(3deg); } }
-@media (prefers-reduced-motion: reduce) { .ask .naut { animation: none; } }
-.ask .body { flex: 1; min-width: 0; }
-.ask h4 { margin: 0 0 3px; font-size: 14px; }
-.ask .sub { color: var(--faint); font-size: 12px; margin-bottom: 11px; }
-.ask form { display: flex; gap: 8px; }
-.ask input {
-  flex: 1; padding: 9px 12px; background: var(--bg); border: 1px solid var(--line);
-  border-radius: 7px; color: var(--text); font-size: 13.5px; font-family: inherit;
-}
-.ask input:focus { outline: none; border-color: var(--accent); }
-.ask button {
-  background: var(--accent-dim); border: 1px solid var(--accent); color: var(--accent);
-  border-radius: 7px; padding: 0 15px; font-size: 13px; cursor: pointer; font-family: inherit;
-}
-.ask button:hover { background: var(--accent); color: #08211e; }
-.answer { margin-top: 13px; border-top: 1px solid var(--line); padding-top: 12px; }
-.answer .hit { padding: 6px 0; border-bottom: 1px solid var(--line-soft); font-size: 13px; }
-.answer .hit:last-child { border-bottom: none; }
-.answer .where { font-family: var(--mono); font-size: 11.5px; color: var(--accent); cursor: pointer; }
-.answer .where:hover { text-decoration: underline; }
-.answer .what { color: var(--muted); }
-.answer .none { color: var(--faint); font-size: 13px; }
-.answer .note { color: var(--faint); font-size: 11.5px; margin-top: 9px; }
 .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 9px; }
 .chips button {
   background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 20px;
@@ -1022,29 +991,6 @@ function renderNav() {
 // --- the mascot and the ask panel ------------------------------------------
 // Drawn inline rather than loaded: one file with no external requests is the whole
 // point of how this page is built.
-const ASTRONAUT = `<svg class="naut" viewBox="0 0 64 64" aria-hidden="true">
-  <defs>
-    <linearGradient id="suit" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#f4f6fa"/><stop offset="1" stop-color="#c8cede"/>
-    </linearGradient>
-    <linearGradient id="visor" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#1b3a44"/><stop offset="1" stop-color="#0d1c22"/>
-    </linearGradient>
-  </defs>
-  <rect x="20" y="39" width="10" height="14" rx="5" fill="url(#suit)" transform="rotate(12 25 46)"/>
-  <rect x="34" y="39" width="10" height="14" rx="5" fill="url(#suit)" transform="rotate(-12 39 46)"/>
-  <rect x="8" y="24" width="12" height="9" rx="4.5" fill="url(#suit)" transform="rotate(-22 14 28)"/>
-  <rect x="44" y="24" width="12" height="9" rx="4.5" fill="url(#suit)" transform="rotate(22 50 28)"/>
-  <rect x="17" y="22" width="30" height="24" rx="11" fill="url(#suit)"/>
-  <rect x="26" y="30" width="12" height="8" rx="3" fill="#aeb6c8" opacity=".75"/>
-  <circle cx="30" cy="34" r="1.5" fill="#5eead4"/><circle cx="35" cy="34" r="1.5" fill="#fab219"/>
-  <circle cx="32" cy="19" r="15" fill="url(#suit)"/>
-  <path d="M22 19a10 10 0 0 1 20 0 10 10 0 0 1-20 0z" fill="url(#visor)"/>
-  <path d="M25 15c2-3 6-4.5 9-4" stroke="#5eead4" stroke-width="2" stroke-linecap="round"
-    fill="none" opacity=".8"/>
-  <circle cx="38" cy="22" r="2" fill="#fff" opacity=".22"/>
-</svg>`;
-
 // Local lexical search over what the page already carries. This is the seam: swap
 // `askLocally` for a call to a Databricks Genie Agent and the surface around it is
 // unchanged. It is labelled as search, not as an assistant, because that is what it
@@ -1164,10 +1110,12 @@ function moonScene() {
     <svg viewBox="0 0 480 262" role="img" aria-label="${T().sceneAlt}">
       <defs>
         <linearGradient id="suit" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stop-color="#f6f8fc"/><stop offset="1" stop-color="#c2c9db"/>
+          <stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#ccd3e0"/>
         </linearGradient>
-        <linearGradient id="visor" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stop-color="#1d3f4a"/><stop offset="1" stop-color="#0b191f"/>
+        <linearGradient id="glass" x1="0" y1="0" x2="0.7" y2="1">
+          <stop offset="0" stop-color="#cfeef0" stop-opacity=".34"/>
+          <stop offset="45%" stop-color="#8fd8d6" stop-opacity=".13"/>
+          <stop offset="100%" stop-color="#5eead4" stop-opacity=".2"/>
         </linearGradient>
         <radialGradient id="moonface" cx="36%" cy="24%">
           <stop offset="0" stop-color="#3a4250"/><stop offset="1" stop-color="#171b22"/>
@@ -1178,50 +1126,70 @@ function moonScene() {
         <circle cx="${MX}" cy="${MY}" r="${MR}" fill="url(#moonface)"/>
         ${craters}
       </g>
-      <ellipse cx="${MX}" cy="${MY - MR + 3}" rx="66" ry="7" fill="#000" opacity=".28"/>
+      <ellipse cx="${MX}" cy="${MY - MR + 3}" rx="30" ry="4.5" fill="#000" opacity=".33"/>
 
-      <g transform="translate(${MX} ${MY - MR + 4})">
+      <g transform="translate(${MX} ${MY - MR + 1})">
         <circle class="dust" cx="-12" cy="-1.5" r="1.7" fill="#8b929e" style="--dx:-8px"/>
         <circle class="dust b" cx="11" cy="-1.5" r="1.4" fill="#8b929e" style="--dx:8px"/>
 
         <g class="rig" id="rig">
-          <g transform="translate(-7 -17)"><g class="limb leg-l">
-            <rect x="-4.2" y="0" width="8.4" height="18" rx="4.2" fill="url(#suit)"/>
-            <rect x="-5" y="12" width="10" height="6" rx="3" fill="#9aa2b4"/>
+          <g transform="translate(-7.5 -13)"><g class="limb leg-l">
+            <rect x="-5" y="0" width="10" height="14" rx="3.6" fill="url(#suit)"/>
+            <rect x="-2.6" y="1.5" width="1.6" height="7" rx=".8" fill="#5eead4" opacity=".5"/>
+            <rect x="-5.6" y="9.5" width="11.2" height="5" rx="2.2" fill="#e8ecf4"/>
           </g></g>
-          <g transform="translate(7 -17)"><g class="limb leg-r">
-            <rect x="-4.2" y="0" width="8.4" height="18" rx="4.2" fill="url(#suit)"/>
-            <rect x="-5" y="12" width="10" height="6" rx="3" fill="#9aa2b4"/>
-          </g></g>
-
-          <rect x="-16" y="-46" width="32" height="17" rx="8" fill="#aab2c6"/>
-          <g transform="translate(-15 -42)"><g class="limb arm-l">
-            <rect x="-4" y="0" width="8" height="17" rx="4" fill="url(#suit)"/>
-            <circle cx="0" cy="16" r="4.4" fill="#9aa2b4"/>
-          </g></g>
-          <g transform="translate(15 -42)"><g class="limb arm-r">
-            <rect x="-4" y="0" width="8" height="17" rx="4" fill="url(#suit)"/>
-            <circle cx="0" cy="16" r="4.4" fill="#9aa2b4"/>
+          <g transform="translate(7.5 -13)"><g class="limb leg-r">
+            <rect x="-5" y="0" width="10" height="14" rx="3.6" fill="url(#suit)"/>
+            <rect x="1" y="1.5" width="1.6" height="7" rx=".8" fill="#5eead4" opacity=".5"/>
+            <rect x="-5.6" y="9.5" width="11.2" height="5" rx="2.2" fill="#e8ecf4"/>
           </g></g>
 
-          <rect x="-14" y="-47" width="28" height="31" rx="12" fill="url(#suit)"/>
-          <rect x="-7" y="-39" width="14" height="9" rx="3.4" fill="#aeb6c8" opacity=".8"/>
-          <circle cx="-3" cy="-34.5" r="1.6" fill="#5eead4"/>
-          <circle cx="3" cy="-34.5" r="1.6" fill="#fab219"/>
+          <g transform="translate(-14 -33)"><g class="limb arm-l">
+            <rect x="-4.3" y="0" width="8.6" height="16" rx="3.4" fill="url(#suit)"/>
+            <rect x="-4.3" y="3.4" width="8.6" height="1.6" fill="#5eead4" opacity=".55"/>
+            <rect x="-4" y="14" width="8" height="6" rx="3" fill="#dfe4ee"/>
+          </g></g>
+          <g transform="translate(14 -33)"><g class="limb arm-r">
+            <rect x="-4.3" y="0" width="8.6" height="16" rx="3.4" fill="url(#suit)"/>
+            <rect x="-4.3" y="3.4" width="8.6" height="1.6" fill="#5eead4" opacity=".55"/>
+            <rect x="-4" y="14" width="8" height="6" rx="3" fill="#dfe4ee"/>
+          </g></g>
+
+          <rect x="-13.5" y="-35" width="27" height="24" rx="6" fill="url(#suit)"/>
+          <rect x="-13.5" y="-33.5" width="27" height="2.2" fill="#5eead4" opacity=".55"/>
+          <circle cx="0" cy="-26" r="4" fill="#dfe4ee"/>
+          <circle cx="0" cy="-26" r="2.1" fill="#5eead4" opacity=".8"/>
+          <rect x="-10.5" y="-21.5" width="7" height="4.6" rx="1.5" fill="#5eead4" opacity=".45"/>
 
           <g class="head" id="head">
-            <circle cx="0" cy="-62" r="17" fill="url(#suit)"/>
-            <path d="M-11.5 -62a11.5 11.5 0 0 1 23 0 11.5 11.5 0 0 1-23 0z" fill="url(#visor)"/>
-            <path d="M-8 -67c2.2-3.4 6.4-5 9.6-4.4" stroke="#5eead4" stroke-width="2.2"
-              stroke-linecap="round" fill="none" opacity=".85"/>
-            <circle cx="7" cy="-58" r="2.3" fill="#fff" opacity=".2"/>
+            <rect x="-9" y="-39" width="18" height="8" rx="3" fill="#e8ecf4"/>
+            <rect x="-25" y="-86" width="50" height="49" rx="15" fill="#f0c8a4"/>
+            <ellipse cx="-25" cy="-62" rx="2.4" ry="3.6" fill="#e6b993"/>
+            <ellipse cx="25" cy="-62" rx="2.4" ry="3.6" fill="#e6b993"/>
+            <path d="M-25 -68c0-14 4-24 25-24 20 0 25 9 25 22 0-4-2-8-6-10
+                     -5-3-9 1-15 1-7 0-11-4-18-2-7 2-11 7-11 13z" fill="#463b2f"/>
+            <path d="M-24 -70c2-8 8-14 17-15 4 0 7 1 9 3-9 1-19 5-26 12z"
+                  fill="#584a3b" opacity=".85"/>
+            <ellipse cx="-9.5" cy="-61" rx="5.8" ry="7.2" fill="#0c0c0c"/>
+            <ellipse cx="9.5" cy="-61" rx="5.8" ry="7.2" fill="#0c0c0c"/>
+            <path d="M0 -56l2.6 6h-5.2z" fill="#e0b78e"/>
           </g>
 
-          <g class="bubble" id="bubble" transform="translate(24 -86)">
+          <circle cx="0" cy="-60" r="35" fill="url(#glass)"/>
+          <circle cx="0" cy="-60" r="35" fill="none" stroke="#e4ebf6" stroke-width="2.6" opacity=".62"/>
+          <circle cx="0" cy="-60" r="31.5" fill="none" stroke="#ffffff" stroke-width="1" opacity=".16"/>
+          <path d="M-25 -74a31 31 0 0 1 20-14" stroke="#ffffff" stroke-width="4.5"
+            stroke-linecap="round" fill="none" opacity=".38"/>
+          <path d="M20 -44a31 31 0 0 0 9-13" stroke="#ffffff" stroke-width="2.6"
+            stroke-linecap="round" fill="none" opacity=".16"/>
+          <rect x="-17" y="-40" width="34" height="10" rx="5" fill="#e8ecf4"/>
+          <rect x="-17" y="-36.6" width="34" height="2" fill="#5eead4" opacity=".5"/>
+
+          <g transform="translate(38 -84)"><g class="bubble" id="bubble">
             <rect x="-15" y="-15" width="30" height="26" rx="9" fill="#1c2027" stroke="#2f3540"/>
-            <path d="M-5 11l5 7 5-7z" fill="#1c2027"/>
+            <path d="M-6 11l6 8 6-8z" fill="#1c2027"/>
             <text id="bubbletext" x="0" y="3" text-anchor="middle" font-size="15" fill="#e6e8ec">*</text>
-          </g>
+          </g></g>
         </g>
       </g>
     </svg>
