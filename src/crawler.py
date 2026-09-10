@@ -43,14 +43,18 @@ INTERNAL_TABLE_PATTERNS = (
     re.compile(r"^event_log_[0-9a-f]{8}", re.IGNORECASE),
 )
 
+# ORDER IS SIGNIFICANT: the first pattern to match wins, so narrower patterns come
+# first. `network_id` sits above `address` because "ip_address" contains "address",
+# and the wrong label here is not cosmetic -- a postal address and an IP address call
+# for different masking policies and are treated differently under GDPR.
 PII_NAME_PATTERNS = {
+    "network_id": re.compile(r"(ip_address|ip_addr|user_agent|device_id|mac_address)", re.IGNORECASE),
     "national_id": re.compile(r"\b(cpf|cnpj|ssn|nif|national_id)\b", re.IGNORECASE),
     "person_name": re.compile(r"(^|_)(nome|name|sobrenome|surname)($|_)", re.IGNORECASE),
     "email": re.compile(r"(email|e_mail|mail)", re.IGNORECASE),
     "phone": re.compile(r"(telefone|phone|celular|mobile|msisdn)", re.IGNORECASE),
     "birth_date": re.compile(r"(nascimento|birth|dob)", re.IGNORECASE),
     "address": re.compile(r"(endereco|address|logradouro|cep|zipcode|postal)", re.IGNORECASE),
-    "network_id": re.compile(r"(ip_address|user_agent|device_id|mac_address)", re.IGNORECASE),
 }
 
 EMAIL_VALUE = re.compile(r"^[^@\s]+@[^@\s]+\.[a-z]{2,}$", re.IGNORECASE)

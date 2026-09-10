@@ -115,6 +115,16 @@ finished.**
 | 4 | Dead columns and wrong types | 100% null, single-valued, currency stored as text |
 | 5 | Delta hygiene | Never optimised, small-file fragmentation, ownership |
 
+On finding #5: what you see in the sample report is fragmentation only. The
+ownership check is implemented and finds nothing, because every table in this
+workspace has an owner set. That is a real result rather than a gap, but it is worth
+saying out loud — a finding that never fires reads like a finding that does not
+exist, and on a workspace with service-principal-created tables it would fire.
+
+Fragmentation itself over-reports at demo scale: a 36 KB table across 6 files is
+technically fragmented and worth nobody's time. The report carries `size_bytes` so
+findings can be ranked by what they actually cost rather than counted.
+
 ---
 
 ## Design decisions
@@ -199,7 +209,14 @@ src/agent.py            descriptions + PII classification, dry-run by default
 src/report.py           consolidated findings -> out/report.md
 src/compare_grounding.py  run twice, with and without documentation, and diff
 src/simulate_usage.py   analyst traffic, so orphan detection has a contrast
+tests/                  the two classifiers that have already been wrong in production
 ```
+
+`pytest tests` — 60 tests, no warehouse connection needed. They cover the personal-data
+classifiers and documentation retrieval, which is where the bugs have actually been:
+value sniffing once reported every date and currency column as a phone number, and
+writing these tests turned up a live one — `ip_address` was being labelled a postal
+address, because `address` matched inside it and was checked first.
 
 Nothing is written to a catalog unless you pass `--apply`. The default prints the
 exact SQL it would run.
