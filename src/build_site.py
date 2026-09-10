@@ -531,6 +531,71 @@ table.cols tr:hover td { background: var(--surface); }
 .card .l { color: var(--faint); font-size: 11.5px; margin-top: 2px; }
 .card.good .n { color: var(--ok); } .card.warn .n { color: var(--warn); } .card.pii .n { color: var(--pii); }
 
+/* space theme.
+   Styling only -- a starfield behind the page, a faint nebula wash, and a mascot.
+   It is skin, and it stays out of the way of the parts that carry meaning: the
+   descriptions, the badges and the provenance keep the contrast they had. */
+body::before {
+  content: ''; position: fixed; inset: 0; z-index: -2; pointer-events: none;
+  background:
+    radial-gradient(900px 600px at 78% -8%, rgba(94, 234, 212, .07), transparent 62%),
+    radial-gradient(760px 520px at 8% 108%, rgba(129, 140, 248, .07), transparent 60%),
+    var(--bg);
+}
+body::after {
+  content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: .5;
+  background-image:
+    radial-gradient(1.1px 1.1px at 12% 18%, #fff, transparent),
+    radial-gradient(1px 1px at 47% 7%, #cfe9ff, transparent),
+    radial-gradient(1.3px 1.3px at 73% 29%, #fff, transparent),
+    radial-gradient(1px 1px at 24% 61%, #dfe8ff, transparent),
+    radial-gradient(1.1px 1.1px at 88% 71%, #fff, transparent),
+    radial-gradient(1px 1px at 61% 88%, #cfe9ff, transparent),
+    radial-gradient(1.2px 1.2px at 34% 41%, #fff, transparent),
+    radial-gradient(1px 1px at 92% 14%, #fff, transparent);
+  background-size: 620px 620px;
+}
+.sidebar, .main { background: transparent; }
+.sidebar { background: rgba(13, 14, 17, .82); backdrop-filter: blur(7px); }
+
+/* the ask panel */
+.ask {
+  display: flex; gap: 16px; align-items: flex-start;
+  background: linear-gradient(180deg, rgba(36,39,46,.75), rgba(26,28,33,.75));
+  border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; margin: 0 0 26px;
+}
+.ask .naut { flex: none; width: 62px; height: 62px; animation: float 5.5s ease-in-out infinite; }
+@keyframes float { 0%,100% { transform: translateY(0) rotate(-3deg); } 50% { transform: translateY(-7px) rotate(3deg); } }
+@media (prefers-reduced-motion: reduce) { .ask .naut { animation: none; } }
+.ask .body { flex: 1; min-width: 0; }
+.ask h4 { margin: 0 0 3px; font-size: 14px; }
+.ask .sub { color: var(--faint); font-size: 12px; margin-bottom: 11px; }
+.ask form { display: flex; gap: 8px; }
+.ask input {
+  flex: 1; padding: 9px 12px; background: var(--bg); border: 1px solid var(--line);
+  border-radius: 7px; color: var(--text); font-size: 13.5px; font-family: inherit;
+}
+.ask input:focus { outline: none; border-color: var(--accent); }
+.ask button {
+  background: var(--accent-dim); border: 1px solid var(--accent); color: var(--accent);
+  border-radius: 7px; padding: 0 15px; font-size: 13px; cursor: pointer; font-family: inherit;
+}
+.ask button:hover { background: var(--accent); color: #08211e; }
+.answer { margin-top: 13px; border-top: 1px solid var(--line); padding-top: 12px; }
+.answer .hit { padding: 6px 0; border-bottom: 1px solid var(--line-soft); font-size: 13px; }
+.answer .hit:last-child { border-bottom: none; }
+.answer .where { font-family: var(--mono); font-size: 11.5px; color: var(--accent); cursor: pointer; }
+.answer .where:hover { text-decoration: underline; }
+.answer .what { color: var(--muted); }
+.answer .none { color: var(--faint); font-size: 13px; }
+.answer .note { color: var(--faint); font-size: 11.5px; margin-top: 9px; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 9px; }
+.chips button {
+  background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 20px;
+  padding: 3px 11px; font-size: 11.5px; cursor: pointer; font-family: inherit;
+}
+.chips button:hover { border-color: var(--accent); color: var(--accent); }
+
 /* galaxy: the landing view.
    Encoding is validated, not decorative -- star area is table bytes, fill is a
    single-hue ordinal ramp over read recency, and personal data is a ring shape
@@ -695,6 +760,14 @@ const STR = {
     gkeySize: 'size = bytes', gkeyRecent: 'read recently', gkeyOld: 'long unread',
     gkeyPii: 'personal data',
     gkeyAlt: 'Map of the catalog. Each star is a table, sized by bytes and lit by how recently it was read.',
+    askTitle: 'Ask the catalog',
+    askSub: 'Search every generated description and every source document on this page.',
+    askPlaceholder: 'What is tAcw? Which columns hold personal data?',
+    askGo: 'Ask', askNone: 'Nothing matched. Try a column name or a word from a description.',
+    askDocs: 'Also in:',
+    chipPii: 'personal data', chipOrphan: 'never read', chipDead: 'dead columns',
+    askFacetNote: 'A filter over what the crawler recorded, not a search.',
+    askNote: 'Lexical search over this page, running in your browser. Connecting a Databricks Genie Agent here would answer in natural language over the same descriptions -- that is the next step, and this is not pretending to be it.',
     runline: r => `<strong>${r.comments} comments</strong> written to Unity Catalog across ${r.tables} tables in <strong>${r.seconds}s</strong>, using <strong>${(r.promptTokens + r.completionTokens).toLocaleString()}</strong> tokens — <strong>$${r.cost.toFixed(4)}</strong> at list price. Modelled, not billed: the run was made on a free tier that charges nothing.`,
     bilingual: t => `Descriptions are generated in English and Portuguese in the same model call: <strong>$${t.cost.toFixed(4)}</strong> for both, against $0.0048 for English alone.`,
     sev: {high: 'high', medium: 'medium', low: 'low'},
@@ -718,6 +791,14 @@ const STR = {
     gkeySize: 'tamanho = bytes', gkeyRecent: 'lida há pouco', gkeyOld: 'sem leitura há muito',
     gkeyPii: 'dado pessoal',
     gkeyAlt: 'Mapa do catálogo. Cada estrela é uma tabela, dimensionada por bytes e iluminada pela recência de leitura.',
+    askTitle: 'Pergunte ao catálogo',
+    askSub: 'Busca em todas as descrições geradas e em toda a documentação desta página.',
+    askPlaceholder: 'O que é tAcw? Quais colunas têm dado pessoal?',
+    askGo: 'Perguntar', askNone: 'Nada encontrado. Tente o nome de uma coluna ou uma palavra de alguma descrição.',
+    askDocs: 'Também em:',
+    chipPii: 'dado pessoal', chipOrphan: 'nunca lidas', chipDead: 'colunas mortas',
+    askFacetNote: 'Um filtro sobre o que o crawler registrou, não uma busca.',
+    askNote: 'Busca léxica sobre esta página, rodando no seu navegador. Conectar um Genie Agent do Databricks aqui responderia em linguagem natural sobre as mesmas descrições -- esse é o próximo passo, e isto não está fingindo ser ele.',
     runline: r => `<strong>${r.comments} comentários</strong> escritos no Unity Catalog em ${r.tables} tabelas em <strong>${r.seconds}s</strong>, usando <strong>${(r.promptTokens + r.completionTokens).toLocaleString()}</strong> tokens — <strong>$${r.cost.toFixed(4)}</strong> a preço de tabela. Modelado, não faturado: a execução foi feita em plano gratuito, que não cobra.`,
     bilingual: t => `As descrições são geradas em inglês e português na mesma chamada ao modelo: <strong>$${t.cost.toFixed(4)}</strong> pelas duas, contra $0,0048 só em inglês.`,
     sev: {high: 'alta', medium: 'média', low: 'baixa'},
@@ -766,6 +847,152 @@ function renderNav() {
     html += '</div>';
   }
   nav.innerHTML = html;
+}
+
+// --- the mascot and the ask panel ------------------------------------------
+// Drawn inline rather than loaded: one file with no external requests is the whole
+// point of how this page is built.
+const ASTRONAUT = `<svg class="naut" viewBox="0 0 64 64" aria-hidden="true">
+  <defs>
+    <linearGradient id="suit" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f4f6fa"/><stop offset="1" stop-color="#c8cede"/>
+    </linearGradient>
+    <linearGradient id="visor" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1b3a44"/><stop offset="1" stop-color="#0d1c22"/>
+    </linearGradient>
+  </defs>
+  <rect x="20" y="39" width="10" height="14" rx="5" fill="url(#suit)" transform="rotate(12 25 46)"/>
+  <rect x="34" y="39" width="10" height="14" rx="5" fill="url(#suit)" transform="rotate(-12 39 46)"/>
+  <rect x="8" y="24" width="12" height="9" rx="4.5" fill="url(#suit)" transform="rotate(-22 14 28)"/>
+  <rect x="44" y="24" width="12" height="9" rx="4.5" fill="url(#suit)" transform="rotate(22 50 28)"/>
+  <rect x="17" y="22" width="30" height="24" rx="11" fill="url(#suit)"/>
+  <rect x="26" y="30" width="12" height="8" rx="3" fill="#aeb6c8" opacity=".75"/>
+  <circle cx="30" cy="34" r="1.5" fill="#5eead4"/><circle cx="35" cy="34" r="1.5" fill="#fab219"/>
+  <circle cx="32" cy="19" r="15" fill="url(#suit)"/>
+  <path d="M22 19a10 10 0 0 1 20 0 10 10 0 0 1-20 0z" fill="url(#visor)"/>
+  <path d="M25 15c2-3 6-4.5 9-4" stroke="#5eead4" stroke-width="2" stroke-linecap="round"
+    fill="none" opacity=".8"/>
+  <circle cx="38" cy="22" r="2" fill="#fff" opacity=".22"/>
+</svg>`;
+
+// Local lexical search over what the page already carries. This is the seam: swap
+// `askLocally` for a call to a Databricks Genie Agent and the surface around it is
+// unchanged. It is labelled as search, not as an assistant, because that is what it
+// currently is.
+function askLocally(query) {
+  // Term frequency alone is useless here. Asking "which columns hold personal data"
+  // returned every Portuguese date column, because `data` is a date in one language
+  // and the query word in the other, and a substring match cannot tell them apart.
+  // Weighting by how rare a term is across the catalog demotes `data` on its own and
+  // lets `personal` carry the query.
+  const STOP = new Set(['the','and','for','что','which','what','does','hold','holds',
+    'have','has','are','is','of','in','on','a','an','to','with','que','qual','quais',
+    'como','onde','tem','tem','sao','são','é','e','de','da','do','das','dos','um','uma']);
+  const terms = query.toLowerCase().split(/[^a-z0-9_À-ſ]+/i)
+    .filter(w => w.length > 2 && !STOP.has(w));
+  if (!terms.length) return {columns: [], docs: []};
+
+  const fields = [];
+  DATA.tables.forEach(t => t.columns.forEach(c => fields.push({
+    table: t.key, column: c.name, text: desc(c) || '',
+    hay: `${t.key} ${c.name} ${(desc(c) || '')} ${(c.piiLabels || []).join(' ')}`.toLowerCase(),
+    // Kept separate and scored lower: a term that only appears in the table's own
+    // description is true of every column in it, so it must never outrank a column
+    // that matches on its own text. Folding it into `hay` made a search for
+    // "milliseconds" return three identifier columns.
+    tableHay: `${(desc(t) || '')}`.toLowerCase(),
+    name: c.name.toLowerCase(),
+    pii: c.pii,
+  })));
+
+  const idf = {};
+  terms.forEach(w => {
+    const seen = fields.filter(f => f.hay.includes(w)).length;
+    idf[w] = Math.log((fields.length + 1) / (seen + 1)) + 1;
+  });
+
+  const columns = [];
+  fields.forEach(f => {
+    let score = 0, matched = 0;
+    terms.forEach(w => {
+      if (f.name.includes(w)) { score += idf[w] * 2; matched++; }
+      else if (f.hay.includes(w)) { score += idf[w]; matched++; }
+      else if (f.tableHay.includes(w)) { score += idf[w] * 0.25; matched++; }
+    });
+    // Coverage matters more than any single strong hit: a row that answers half the
+    // question is not half as good as one that answers all of it. Without this, one
+    // common term in a column name outranks a row that matches every term.
+    score *= matched / terms.length;
+    if (score > 0.9) columns.push({score, table: f.table, column: f.column, text: f.text});
+  });
+  columns.sort((a, b) => b.score - a.score);
+
+  const docs = [];
+  DOCS.forEach(d => {
+    const plain = d.html.replace(/<[^>]+>/g, ' ').toLowerCase();
+    const score = terms.reduce((n, w) => n + (plain.includes(w) ? (idf[w] || 1) : 0), 0);
+    if (score) docs.push({score, id: d.id, title: d.title});
+  });
+  docs.sort((a, b) => b.score - a.score);
+
+  return {columns: columns.slice(0, 6), docs: docs.slice(0, 2)};
+}
+
+// Facets, not search. "Which columns hold personal data" cannot be answered by
+// matching words -- no description contains the phrase; they say CPF, or full name.
+// A filter over a flag the crawler already set is honest; a synonym table pretending
+// to understand the question is not. This is the gap a Genie Agent would close.
+const FACETS = {
+  pii: t => t.columns.filter(c => c.pii).map(c => ({table: t.key, column: c.name, text: desc(c) || ''})),
+  dead: t => t.columns.filter(c => c.allNull || c.constant)
+    .map(c => ({table: t.key, column: c.name, text: c.allNull ? '100% null' : 'single repeated value'})),
+  orphan: t => t.orphan ? [{table: t.key, column: '', text: desc(t) || ''}] : [],
+};
+
+function renderFacet(name) {
+  const box = document.getElementById('answer');
+  const rows = DATA.tables.flatMap(FACETS[name]);
+  box.innerHTML = `<div class="answer">${rows.map(h => `<div class="hit">
+      <span class="where" data-go="${esc(h.table)}">${esc(h.table)}${h.column ? '.' + esc(h.column) : ''}</span>
+      <div class="what">${esc(h.text)}</div></div>`).join('')}
+    <div class="note">${T().askFacetNote}</div></div>`;
+}
+
+function renderAnswer(query) {
+  const box = document.getElementById('answer');
+  if (!box) return;
+  const {columns, docs} = askLocally(query);
+  if (!columns.length && !docs.length) {
+    box.innerHTML = `<div class="answer"><div class="none">${T().askNone}</div></div>`;
+    return;
+  }
+  const hits = columns.map(h => `<div class="hit">
+      <span class="where" data-go="${esc(h.table)}">${esc(h.table)}.${esc(h.column)}</span>
+      <div class="what">${esc(h.text)}</div></div>`).join('');
+  const sources = docs.map(d =>
+    `<span class="where" data-doc="${esc(d.id)}">§ ${esc(d.id)}</span>`).join(' · ');
+  box.innerHTML = `<div class="answer">${hits}
+    ${sources ? `<div class="note">${T().askDocs} ${sources}</div>` : ''}
+    <div class="note">${T().askNote}</div></div>`;
+}
+
+function renderAsk() {
+  return `<div class="ask">
+    ${ASTRONAUT}
+    <div class="body">
+      <h4>${T().askTitle}</h4>
+      <div class="sub">${T().askSub}</div>
+      <form id="askform" autocomplete="off">
+        <input id="askq" type="search" placeholder="${T().askPlaceholder}">
+        <button type="submit">${T().askGo}</button>
+      </form>
+      <div class="chips">
+        <button data-facet="pii">${T().chipPii}</button>
+        <button data-facet="orphan">${T().chipOrphan}</button>
+        <button data-facet="dead">${T().chipDead}</button>
+      </div>
+      <div id="answer"></div>
+    </div></div>`;
 }
 
 // --- galaxy ---------------------------------------------------------------
@@ -939,6 +1166,7 @@ function renderOverview() {
 
   content.innerHTML = `
     ${renderGalaxy()}
+    ${renderAsk()}
     <div class="hero" style="border-top:1px solid var(--line); margin-top:26px; padding-top:26px">
       <div class="eyebrow">${esc(DATA.catalog)}</div>
       <h2>${T().title}</h2>
@@ -1058,10 +1286,22 @@ nav.addEventListener('click', e => {
 content.addEventListener('click', e => {
   const passage = e.target.closest('.passage');
   if (passage) return go({view: 'doc', key: passage.dataset.doc});
+  const chip = e.target.closest('.chips button');
+  if (chip) return renderFacet(chip.dataset.facet);
+  const where = e.target.closest('.where');
+  if (where) {
+    return go(where.dataset.doc ? {view: 'doc', key: where.dataset.doc}
+                                : {view: 'table', key: where.dataset.go});
+  }
   const star = e.target.closest('.star');
   if (star) return go({view: 'table', key: star.dataset.key});
   const link = e.target.closest('a[href^="#table/"]');
   if (link) { e.preventDefault(); go({view: 'table', key: decodeURIComponent(link.hash.slice(7))}); }
+});
+content.addEventListener('submit', e => {
+  if (e.target.id !== 'askform') return;
+  e.preventDefault();
+  renderAnswer(document.getElementById('askq').value);
 });
 document.getElementById('q').addEventListener('input', e => { filter = e.target.value; renderNav(); });
 document.getElementById('burger').addEventListener('click', () => sidebar.classList.toggle('open'));
