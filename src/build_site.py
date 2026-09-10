@@ -608,7 +608,7 @@ body::after {
    prefers-reduced-motion -- a character idling in the corner of the eye is exactly
    the kind of motion that makes a page unusable for some readers. */
 .scene { position: relative; height: 262px; margin: 0 0 4px; }
-.scene svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.scene svg { width: 100%; height: 100%; display: block; overflow: hidden; }
 .scene .corona {
   position: absolute; left: 50%; top: 46%; width: 380px; height: 380px; margin: -190px 0 0 -190px;
   border-radius: 50%; pointer-events: none;
@@ -1112,6 +1112,10 @@ function moonScene() {
         <linearGradient id="suit" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#ccd3e0"/>
         </linearGradient>
+        <linearGradient id="fade" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#131418" stop-opacity="0"/>
+          <stop offset="100%" stop-color="#131418" stop-opacity=".92"/>
+        </linearGradient>
         <linearGradient id="glass" x1="0" y1="0" x2="0.7" y2="1">
           <stop offset="0" stop-color="#cfeef0" stop-opacity=".34"/>
           <stop offset="45%" stop-color="#8fd8d6" stop-opacity=".13"/>
@@ -1192,6 +1196,7 @@ function moonScene() {
           </g></g>
         </g>
       </g>
+      <rect x="0" y="200" width="480" height="62" fill="url(#fade)"/>
     </svg>
   </div>`;
 }
