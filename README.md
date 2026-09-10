@@ -125,6 +125,24 @@ can see that `tAbandon` says "milliseconds", click the passage that made it say 
 and land in the Genesys field reference. That is the difference between a description
 you trust and one you merely accept.
 
+### Ask the catalog
+
+![The ask view](docs/screenshots/ask.png)
+
+A search across every generated description and every source document, running in the
+browser with no key and no backend. Type `tAcw` and it answers from the description
+grounded in the Genesys reference, and names the passage.
+
+What it deliberately does not do is pretend to be an assistant. Keyword search cannot
+answer "which columns hold personal data" — no description contains the phrase, they
+say CPF, or full name — so that concept is a **filter** over a flag the crawler
+recorded, not a synonym table faking comprehension. The footer of the panel says which
+is which.
+
+That gap is the argument for the next step: a Databricks Genie Agent connected over
+the same descriptions would answer the question as asked. `askLocally()` in
+`src/build_site.py` is the single function that call would replace.
+
 | | |
 |---|---|
 | ![A table with its provenance](docs/screenshots/table-genesys.png) | ![The source document it cites](docs/screenshots/source-doc.png) |

@@ -558,6 +558,107 @@ body::after {
 .sidebar, .main { background: transparent; }
 .sidebar { background: rgba(13, 14, 17, .82); backdrop-filter: blur(7px); }
 
+/* the sky.
+   Three fixed layers behind everything: nebula wash, static starfield, and the
+   moving pieces. All of it is pointer-events:none and sits below the content, and
+   all motion stops under prefers-reduced-motion -- a page someone reads for the
+   description of a column must not have anything crawling across it that they did
+   not ask for. */
+.sky { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
+.sky svg { position: absolute; }
+
+.moon { top: 46px; right: 58px; width: 74px; height: 74px; opacity: .5; }
+.planet-a { bottom: -96px; right: -72px; width: 340px; height: 340px; opacity: .26; }
+.planet-b { top: 30%; left: 30%; width: 150px; height: 150px; opacity: .16; }
+
+.shooting {
+  position: absolute; width: 150px; height: 1.5px; top: 0; left: 0;
+  background: linear-gradient(90deg, transparent, #ffffff 42%, transparent);
+  filter: drop-shadow(0 0 5px rgba(255,255,255,.75));
+  opacity: 0; transform: rotate(28deg);
+  animation: shoot 15s linear infinite;
+}
+.shooting.b { animation-duration: 19s; animation-delay: 6.5s; }
+.shooting.c { animation-duration: 24s; animation-delay: 12s; }
+@keyframes shoot {
+  0%      { opacity: 0; transform: translate(-14vw, 8vh) rotate(28deg); }
+  1.6%    { opacity: .85; }
+  9%      { opacity: 0; transform: translate(88vw, 56vh) rotate(28deg); }
+  100%    { opacity: 0; transform: translate(88vw, 56vh) rotate(28deg); }
+}
+.shooting.b { top: 22%; }
+.shooting.c { top: 44%; }
+
+.drift { animation: drift 90s ease-in-out infinite alternate; }
+@keyframes drift { from { transform: translateY(0); } to { transform: translateY(-16px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .shooting { display: none; }
+  .drift { animation: none; }
+}
+
+/* the ask view -- the page that has to sell the project in ten seconds. */
+.mission { padding: 8px 0 40px; }
+.stage {
+  position: relative; display: flex; justify-content: center; align-items: center;
+  height: 260px; margin-bottom: 4px;
+}
+.stage .sun {
+  position: absolute; width: 320px; height: 320px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(94,234,212,.20) 0%, rgba(94,234,212,.06) 42%, transparent 68%);
+}
+.stage .orbit {
+  position: absolute; width: 300px; height: 300px; border-radius: 50%;
+  border: 1px solid rgba(94,234,212,.18); border-top-color: rgba(94,234,212,.42);
+  animation: spin 26s linear infinite;
+}
+.stage .orbit.two {
+  width: 218px; height: 218px; border-color: rgba(255,255,255,.07);
+  border-left-color: rgba(255,255,255,.20); animation-duration: 17s; animation-direction: reverse;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.stage .naut-big { position: relative; width: 132px; height: 132px; animation: float 6s ease-in-out infinite; }
+.stage .rock {
+  position: absolute; right: 16%; bottom: 8%; width: 62px; height: 62px; opacity: .8;
+  animation: float 8s ease-in-out infinite reverse;
+}
+@media (prefers-reduced-motion: reduce) {
+  .stage .orbit, .stage .naut-big, .stage .rock { animation: none; }
+}
+
+.mission h2 {
+  text-align: center; font-size: 30px; letter-spacing: -.015em; margin: 0 0 10px;
+}
+.mission .lede {
+  text-align: center; color: var(--muted); font-size: 15px; max-width: 560px;
+  margin: 0 auto 8px;
+}
+.mission .counts {
+  text-align: center; color: var(--faint); font-family: var(--mono); font-size: 11.5px;
+  letter-spacing: .05em; margin-bottom: 26px;
+}
+.askbox { max-width: 660px; margin: 0 auto; }
+.askbox form { display: flex; gap: 9px; }
+.askbox input {
+  flex: 1; padding: 13px 16px; font-size: 15px; border-radius: 10px;
+  background: rgba(10,11,14,.72); border: 1px solid var(--line); color: var(--text);
+  font-family: inherit;
+}
+.askbox input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(94,234,212,.10); }
+.askbox button {
+  padding: 0 22px; border-radius: 10px; font-size: 14px; cursor: pointer; font-family: inherit;
+  background: var(--accent); border: 1px solid var(--accent); color: #07211d; font-weight: 600;
+}
+.askbox button:hover { filter: brightness(1.08); }
+.suggest { display: flex; gap: 7px; flex-wrap: wrap; justify-content: center; margin: 14px 0 6px; }
+.suggest button {
+  background: rgba(255,255,255,.03); border: 1px solid var(--line); color: var(--muted);
+  border-radius: 20px; padding: 5px 13px; font-size: 12.5px; cursor: pointer; font-family: inherit;
+}
+.suggest button:hover { border-color: var(--accent); color: var(--accent); }
+.suggest button.facet { border-style: dashed; }
+.mission .answer { max-width: 660px; margin: 20px auto 0; }
+
 /* the ask panel */
 .ask {
   display: flex; gap: 16px; align-items: flex-start;
@@ -595,32 +696,6 @@ body::after {
   padding: 3px 11px; font-size: 11.5px; cursor: pointer; font-family: inherit;
 }
 .chips button:hover { border-color: var(--accent); color: var(--accent); }
-
-/* galaxy: the landing view.
-   Encoding is validated, not decorative -- star area is table bytes, fill is a
-   single-hue ordinal ramp over read recency, and personal data is a ring shape
-   rather than a hue, because a red ring on a dim teal star measured CVD dE 5.9
-   against the fill and no label rescues a colour that close. */
-.galaxy { position: relative; margin: 0 0 6px; }
-.galaxy svg { width: 100%; height: auto; display: block; border-radius: 10px; background: #0b0c0f; }
-.galaxy .star { cursor: pointer; }
-.galaxy .star:hover .core { stroke: var(--text); stroke-width: 1.5; }
-.galaxy .star:hover .lbl { fill: var(--text); font-weight: 600; }
-.galaxy .lbl { font-family: var(--mono); font-size: 9.5px; fill: var(--muted); pointer-events: none; }
-.galaxy .lbl.dim { fill: var(--faint); }
-.galaxy .slabel {
-  font-family: var(--mono); font-size: 10px; fill: var(--faint);
-  letter-spacing: .12em; text-transform: uppercase; pointer-events: none;
-}
-.galaxy .pii-ring { fill: none; stroke: var(--text); stroke-opacity: .55; stroke-dasharray: 2 3; }
-.gkey {
-  display: flex; gap: 22px; flex-wrap: wrap; align-items: center;
-  color: var(--faint); font-size: 11.5px; margin: 10px 2px 0;
-}
-.gkey .k { display: flex; align-items: center; gap: 6px; }
-.gkey .ramp { display: flex; gap: 2px; }
-.gkey .ramp i { width: 13px; height: 9px; border-radius: 2px; display: block; }
-.gkey svg { display: block; }
 
 /* hero */
 .hero { padding: 8px 0 30px; border-bottom: 1px solid var(--line); margin-bottom: 30px; }
@@ -712,6 +787,47 @@ body::after {
 </style>
 </head>
 <body>
+<div class="sky" aria-hidden="true">
+  <svg class="moon drift" viewBox="0 0 64 64">
+    <defs>
+      <radialGradient id="mg" cx="38%" cy="34%">
+        <stop offset="0" stop-color="#f2f5ff"/><stop offset="1" stop-color="#b9c2dc"/>
+      </radialGradient>
+    </defs>
+    <circle cx="32" cy="32" r="26" fill="url(#mg)"/>
+    <circle cx="24" cy="25" r="4.5" fill="#9aa5c4" opacity=".55"/>
+    <circle cx="39" cy="38" r="6.5" fill="#9aa5c4" opacity=".42"/>
+    <circle cx="42" cy="21" r="3" fill="#9aa5c4" opacity=".5"/>
+    <circle cx="27" cy="43" r="2.6" fill="#9aa5c4" opacity=".38"/>
+  </svg>
+
+  <svg class="planet-a drift" viewBox="0 0 200 200">
+    <defs>
+      <radialGradient id="pa" cx="34%" cy="30%">
+        <stop offset="0" stop-color="#3f7f96"/><stop offset="1" stop-color="#123243"/>
+      </radialGradient>
+    </defs>
+    <circle cx="100" cy="100" r="66" fill="url(#pa)"/>
+    <ellipse cx="100" cy="100" rx="96" ry="26" fill="none" stroke="#7fb6c9"
+      stroke-width="5" opacity=".5" transform="rotate(-19 100 100)"/>
+    <ellipse cx="100" cy="100" rx="86" ry="21" fill="none" stroke="#a9d4e2"
+      stroke-width="2" opacity=".35" transform="rotate(-19 100 100)"/>
+    <path d="M52 84a66 66 0 0 1 40-24" stroke="#8fc4d6" stroke-width="3" fill="none" opacity=".28"/>
+  </svg>
+
+  <svg class="planet-b" viewBox="0 0 120 120">
+    <defs>
+      <radialGradient id="pb" cx="36%" cy="30%">
+        <stop offset="0" stop-color="#8f7ad6"/><stop offset="1" stop-color="#2b2350"/>
+      </radialGradient>
+    </defs>
+    <circle cx="60" cy="60" r="46" fill="url(#pb)"/>
+    <ellipse cx="52" cy="46" rx="15" ry="9" fill="#b8a6f0" opacity=".22"/>
+    <ellipse cx="72" cy="76" rx="19" ry="10" fill="#1e1838" opacity=".3"/>
+  </svg>
+
+  <i class="shooting"></i><i class="shooting b"></i><i class="shooting c"></i>
+</div>
 <button class="burger" id="burger" aria-label="Toggle navigation">☰</button>
 <nav class="sidebar" id="sidebar">
   <div class="brand">
@@ -757,13 +873,16 @@ const STR = {
     sourceDoc: 'source documentation', distinct: 'distinct', nullPct: 'null',
     note: 'A dot beside a table marks personal data (§PII§) or a table nothing has read (§ORPHAN§). The score stops short of 100 on purpose: what remains are not documentation problems but decisions a person has to make. Snapshot of scan §SCAN§, not a live view.',
     generatedBy: 'Generated by',
-    gkeySize: 'size = bytes', gkeyRecent: 'read recently', gkeyOld: 'long unread',
-    gkeyPii: 'personal data',
-    gkeyAlt: 'Map of the catalog. Each star is a table, sized by bytes and lit by how recently it was read.',
     askTitle: 'Ask the catalog',
     askSub: 'Search every generated description and every source document on this page.',
     askPlaceholder: 'What is tAcw? Which columns hold personal data?',
     askGo: 'Ask', askNone: 'Nothing matched. Try a column name or a word from a description.',
+    askNav: 'Ask',
+    missionLede: 'Every table and column in this catalog was described by a model, grounded in the documentation of the system it came from. Ask about any of it.',
+    mTables: 'tables',
+    mColumns: 'columns',
+    mDocs: 'source documents',
+    mPii: 'carrying personal data',
     askDocs: 'Also in:',
     chipPii: 'personal data', chipOrphan: 'never read', chipDead: 'dead columns',
     askFacetNote: 'A filter over what the crawler recorded, not a search.',
@@ -788,13 +907,16 @@ const STR = {
     sourceDoc: 'documentação de origem', distinct: 'distintos', nullPct: 'nulos',
     note: 'Um ponto ao lado da tabela indica dado pessoal (§PII§) ou tabela que ninguém leu (§ORPHAN§). O índice para antes de 100 de propósito: o que resta não são problemas de documentação, e sim decisões que cabem a uma pessoa. Retrato do scan §SCAN§, não uma visão ao vivo.',
     generatedBy: 'Gerado por',
-    gkeySize: 'tamanho = bytes', gkeyRecent: 'lida há pouco', gkeyOld: 'sem leitura há muito',
-    gkeyPii: 'dado pessoal',
-    gkeyAlt: 'Mapa do catálogo. Cada estrela é uma tabela, dimensionada por bytes e iluminada pela recência de leitura.',
     askTitle: 'Pergunte ao catálogo',
     askSub: 'Busca em todas as descrições geradas e em toda a documentação desta página.',
     askPlaceholder: 'O que é tAcw? Quais colunas têm dado pessoal?',
     askGo: 'Perguntar', askNone: 'Nada encontrado. Tente o nome de uma coluna ou uma palavra de alguma descrição.',
+    askNav: 'Perguntar',
+    missionLede: 'Cada tabela e coluna deste catálogo foi descrita por um modelo, ancorada na documentação do sistema de origem. Pergunte sobre qualquer uma.',
+    mTables: 'tabelas',
+    mColumns: 'colunas',
+    mDocs: 'documentos de origem',
+    mPii: 'com dado pessoal',
     askDocs: 'Também em:',
     chipPii: 'dado pessoal', chipOrphan: 'nunca lidas', chipDead: 'colunas mortas',
     askFacetNote: 'Um filtro sobre o que o crawler registrou, não uma busca.',
@@ -824,8 +946,11 @@ function matches(t) {
 function renderNav() {
   const schemas = {};
   DATA.tables.filter(matches).forEach(t => (schemas[t.schema] ??= []).push(t));
-  let html = `<div class="group"><button class="item ${current.view === 'overview' ? 'active' : ''}"
-      data-view="overview"><span class="hash">≡</span> ${T().overview}</button></div>`;
+  let html = `<div class="group">
+    <button class="item ${current.view === 'ask' ? 'active' : ''}" data-view="ask">
+      <span class="hash">✦</span> ${T().askNav}</button>
+    <button class="item ${current.view === 'overview' ? 'active' : ''}" data-view="overview">
+      <span class="hash">≡</span> ${T().overview}</button></div>`;
   for (const [schema, tables] of Object.entries(schemas)) {
     html += `<div class="group"><div class="group-label">${esc(schema)}</div>`;
     tables.forEach(t => {
@@ -977,160 +1102,42 @@ function renderAnswer(query) {
 }
 
 function renderAsk() {
-  return `<div class="ask">
-    ${ASTRONAUT}
-    <div class="body">
-      <h4>${T().askTitle}</h4>
-      <div class="sub">${T().askSub}</div>
+  const s = DATA.stats;
+  const examples = ['tAcw', 'milliseconds', 'wrapUpCode', 'cpf', 'service level'];
+  return `<div class="mission">
+    <div class="stage">
+      <div class="sun"></div>
+      <div class="orbit"></div><div class="orbit two"></div>
+      ${ASTRONAUT.replace('class="naut"', 'class="naut-big"')}
+      <svg class="rock" viewBox="0 0 64 64" aria-hidden="true">
+        <defs><radialGradient id="rk" cx="34%" cy="30%">
+          <stop offset="0" stop-color="#7f8aa6"/><stop offset="1" stop-color="#2a3040"/>
+        </radialGradient></defs>
+        <circle cx="32" cy="32" r="22" fill="url(#rk)"/>
+        <circle cx="25" cy="26" r="4" fill="#1f2431" opacity=".55"/>
+        <circle cx="38" cy="37" r="5.5" fill="#1f2431" opacity=".45"/>
+      </svg>
+    </div>
+
+    <h2>${T().askTitle}</h2>
+    <p class="lede">${T().missionLede}</p>
+    <div class="counts">${s.tables} ${T().mTables} · ${s.columns} ${T().mColumns}
+      · ${DOCS.length} ${T().mDocs} · ${s.piiColumns} ${T().mPii}</div>
+
+    <div class="askbox">
       <form id="askform" autocomplete="off">
         <input id="askq" type="search" placeholder="${T().askPlaceholder}">
         <button type="submit">${T().askGo}</button>
       </form>
-      <div class="chips">
-        <button data-facet="pii">${T().chipPii}</button>
-        <button data-facet="orphan">${T().chipOrphan}</button>
-        <button data-facet="dead">${T().chipDead}</button>
+      <div class="suggest">
+        ${examples.map(q => `<button data-q="${esc(q)}">${esc(q)}</button>`).join('')}
+        <button class="facet" data-facet="pii">${T().chipPii}</button>
+        <button class="facet" data-facet="orphan">${T().chipOrphan}</button>
+        <button class="facet" data-facet="dead">${T().chipDead}</button>
       </div>
       <div id="answer"></div>
-    </div></div>`;
-}
-
-// --- galaxy ---------------------------------------------------------------
-// Positions are seeded, so the same catalog draws the same map every build. A
-// force simulation would look livelier and put a table somewhere different each
-// time, which is the opposite of what a map is for.
-const RAMP = ['#ccf7ec', '#6fdcc4', '#2ea88f', '#1e8272', '#14594f'];
-const DEAD = '#5b616b';
-const RECENCY_BANDS = [7, 30, 90, 365];   // days; index picks the ramp step
-
-function mulberry32(a) {
-  return function () {
-    a |= 0; a = a + 0x6D2B79F5 | 0;
-    let t = Math.imul(a ^ a >>> 15, 1 | a);
-    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
-    return ((t ^ t >>> 14) >>> 0) / 4294967296;
-  };
-}
-
-function recencyStep(t) {
-  if (t.orphan) return -1;                       // dead star: no step on the ramp
-  const days = t.lastRead
-    ? Math.floor((Date.now() - Date.parse(t.lastRead)) / 86400000) : 999;
-  for (let i = 0; i < RECENCY_BANDS.length; i++) if (days <= RECENCY_BANDS[i]) return i;
-  return RAMP.length - 1;
-}
-
-function renderGalaxy() {
-  const W = 1000, H = 620, cx = W / 2, cy = H / 2;
-  const rand = mulberry32(0x5EED);
-
-  // Background field. Purely atmospheric and deliberately faint: it must never
-  // compete with a star that carries data.
-  let bg = '';
-  for (let i = 0; i < 190; i++) {
-    const x = rand() * W, y = rand() * H, r = rand() * 0.9 + 0.25;
-    bg += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r.toFixed(2)}"
-      fill="#ffffff" opacity="${(rand() * 0.28 + 0.05).toFixed(2)}"/>`;
-  }
-
-  const schemas = DATA.schemaCoverage.map(c => c.schema);
-  const maxBytes = Math.max(...DATA.tables.map(t => t.sizeBytes || 1), 1);
-  // Area encodes bytes, so the radius is the square root. Encoding magnitude on
-  // radius directly would exaggerate the largest table roughly fourfold.
-  const radius = b => 5 + 21 * Math.sqrt((b || 1) / maxBytes);
-
-  // Pass one: positions only. Labels are placed afterwards, because where a label
-  // can go depends on every other label already on the map.
-  const placed = [], boxes = [];
-  schemas.forEach((schema, si) => {
-    const tables = DATA.tables.filter(t => t.schema === schema);
-    const angle = (si / schemas.length) * Math.PI * 2 - Math.PI / 2;
-    const sx = cx + Math.cos(angle) * W * 0.29;
-    const sy = cy + Math.sin(angle) * H * 0.30;
-    const above = sy > H * 0.32;
-    const ly = Math.min(Math.max(above ? sy - 92 : sy + 104, 24), H - 14);
-    placed.push({kind: 'schema', schema, x: sx, y: ly});
-    boxes.push({x0: sx - schema.length * 3.6, x1: sx + schema.length * 3.6, y0: ly - 9, y1: ly + 4});
-
-    tables.forEach((t, ti) => {
-      // Golden angle keeps siblings from lining up or overlapping.
-      const a = ti * 2.39996 + si;
-      const d = tables.length === 1 ? 0 : 44 + Math.sqrt(ti) * 36;
-      placed.push({
-        kind: 'star', t,
-        x: sx + Math.cos(a) * d,
-        y: sy + Math.sin(a) * d * 0.74,
-        r: radius(t.sizeBytes),
-        step: recencyStep(t),
-      });
-    });
-  });
-
-  // Pass two: each label takes the first candidate slot that collides with nothing
-  // already placed. Without this, sibling tables in a dense schema print their
-  // names on top of each other and the map becomes unreadable exactly where it is
-  // busiest -- which is where a reader is most likely to be looking.
-  const overlaps = (a, b) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
-  placed.filter(o => o.kind === 'star').forEach(o => {
-    const halfWidth = o.t.name.length * 2.85 + 3;
-    const offsets = [o.r + 15, -o.r - 9, o.r + 28, -o.r - 22, o.r + 41, -o.r - 35];
-    let chosen = offsets[0];
-    for (const dy of offsets) {
-      const box = {x0: o.x - halfWidth, x1: o.x + halfWidth, y0: o.y + dy - 9, y1: o.y + dy + 3};
-      if (!boxes.some(b => overlaps(box, b))) { chosen = dy; boxes.push(box); break; }
-    }
-    o.labelY = o.y + chosen;
-  });
-
-  let clusters = '', stars = '';
-  placed.forEach(o => {
-    if (o.kind === 'schema') {
-      clusters += `<text class="slabel" x="${o.x.toFixed(0)}" y="${o.y.toFixed(0)}"
-        text-anchor="middle">${esc(o.schema)}</text>`;
-      return;
-    }
-    const t = o.t, fill = o.step < 0 ? DEAD : RAMP[o.step];
-    stars += `<g class="star" data-key="${esc(t.key)}">
-      <title>${esc(t.key)} — ${(t.rows ?? 0).toLocaleString()} ${T().rows}, ${bytes(t.sizeBytes)}${t.orphan ? ' — ' + T().neverReadOne : ''}${t.piiCount ? ' — ' + t.piiCount + ' ' + T().piiCols : ''}</title>
-      <circle cx="${o.x.toFixed(1)}" cy="${o.y.toFixed(1)}" r="${(o.r * 2.6).toFixed(1)}"
-        fill="url(#glow${o.step < 0 ? 'd' : o.step})" opacity="${o.step < 0 ? 0.5 : 0.85}"/>
-      <circle class="core" cx="${o.x.toFixed(1)}" cy="${o.y.toFixed(1)}" r="${o.r.toFixed(1)}"
-        fill="${fill}"/>
-      ${t.piiCount ? `<circle class="pii-ring" cx="${o.x.toFixed(1)}" cy="${o.y.toFixed(1)}"
-        r="${(o.r + 5).toFixed(1)}"/><circle class="pii-ring" cx="${o.x.toFixed(1)}"
-        cy="${o.y.toFixed(1)}" r="${(o.r + 8).toFixed(1)}" stroke-opacity=".3"/>` : ''}
-      <text class="lbl ${t.orphan ? '' : 'dim'}" x="${o.x.toFixed(1)}"
-        y="${o.labelY.toFixed(1)}" text-anchor="middle">${esc(t.name)}</text>
-    </g>`;
-  });
-
-  const gradients = RAMP.map((hex, i) => `<radialGradient id="glow${i}">
-      <stop offset="0%" stop-color="${hex}" stop-opacity=".55"/>
-      <stop offset="55%" stop-color="${hex}" stop-opacity=".12"/>
-      <stop offset="100%" stop-color="${hex}" stop-opacity="0"/></radialGradient>`).join('') +
-    `<radialGradient id="glowd">
-      <stop offset="0%" stop-color="${DEAD}" stop-opacity=".30"/>
-      <stop offset="100%" stop-color="${DEAD}" stop-opacity="0"/></radialGradient>`;
-
-  const rampKey = RAMP.map(h => `<i style="background:${h}"></i>`).join('');
-  const key = `<div class="gkey">
-    <span class="k">${T().gkeySize}
-      <svg width="52" height="16"><circle cx="7" cy="8" r="3" fill="${RAMP[2]}"/>
-      <circle cx="22" cy="8" r="6" fill="${RAMP[2]}"/>
-      <circle cx="41" cy="8" r="9" fill="${RAMP[2]}"/></svg></span>
-    <span class="k">${T().gkeyRecent}<span class="ramp">${rampKey}</span>${T().gkeyOld}</span>
-    <span class="k"><svg width="16" height="16"><circle cx="8" cy="8" r="3.5" fill="${DEAD}"/></svg>
-      ${T().neverReadOne}</span>
-    <span class="k"><svg width="18" height="18"><circle cx="9" cy="9" r="3" fill="${RAMP[1]}"/>
-      <circle cx="9" cy="9" r="6" fill="none" stroke="#e6e8ec" stroke-opacity=".55" stroke-dasharray="2 3"/>
-      </svg>${T().gkeyPii}</span></div>`;
-
-  return `<div class="galaxy">
-    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${T().gkeyAlt}">
-      <defs>${gradients}</defs>
-      <rect width="${W}" height="${H}" fill="#0b0c0f"/>
-      ${bg}${clusters}${stars}
-    </svg></div>${key}`;
+    </div>
+  </div>`;
 }
 
 function renderOverview() {
@@ -1165,9 +1172,7 @@ function renderOverview() {
     .replace('§SCAN§', esc(DATA.scanId));
 
   content.innerHTML = `
-    ${renderGalaxy()}
-    ${renderAsk()}
-    <div class="hero" style="border-top:1px solid var(--line); margin-top:26px; padding-top:26px">
+    <div class="hero">
       <div class="eyebrow">${esc(DATA.catalog)}</div>
       <h2>${T().title}</h2>
       <p class="lede">${T().lede}</p>
@@ -1257,6 +1262,7 @@ function render() {
   renderNav();
   if (current.view === 'table') renderTable(current.key);
   else if (current.view === 'doc') renderDoc(current.key);
+  else if (current.view === 'ask') content.innerHTML = renderAsk();
   else renderOverview();
   document.getElementById('main').scrollTop = 0;
   document.title = (current.key ? current.key + ' — ' : '') + DATA.catalog + ' catalog documentation';
@@ -1268,11 +1274,14 @@ function fromHash() {
   const raw = decodeURIComponent(location.hash.replace(/^#/, ''));
   const [view, ...rest] = raw.split('/');
   const key = rest.join('/');
+  if (view === 'ask') return {view: 'ask'};
   return (view === 'table' || view === 'doc') && key ? {view, key} : {view: 'overview'};
 }
 function go(next, push = true) {
   current = next;
-  const hash = next.view === 'overview' ? '' : `#${next.view}/${encodeURIComponent(next.key)}`;
+  const hash = next.view === 'overview' ? ''
+    : next.view === 'ask' ? '#ask'
+    : `#${next.view}/${encodeURIComponent(next.key)}`;
   if (push && location.hash !== hash) history.pushState(null, '', hash || location.pathname);
   render();
   sidebar.classList.remove('open');
@@ -1286,8 +1295,14 @@ nav.addEventListener('click', e => {
 content.addEventListener('click', e => {
   const passage = e.target.closest('.passage');
   if (passage) return go({view: 'doc', key: passage.dataset.doc});
-  const chip = e.target.closest('.chips button');
+  const chip = e.target.closest('[data-facet]');
   if (chip) return renderFacet(chip.dataset.facet);
+  const pill = e.target.closest('[data-q]');
+  if (pill) {
+    const box = document.getElementById('askq');
+    if (box) box.value = pill.dataset.q;
+    return renderAnswer(pill.dataset.q);
+  }
   const where = e.target.closest('.where');
   if (where) {
     return go(where.dataset.doc ? {view: 'doc', key: where.dataset.doc}
