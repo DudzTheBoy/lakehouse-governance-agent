@@ -22,6 +22,15 @@ Three decisions worth knowing about:
    The model sees a whole table at once, so it can use sibling columns as context --
    and 7 calls cost a fraction of 47.
 
+4. TWO LANGUAGES, ONE CALL.
+   Descriptions are produced in English and Brazilian Portuguese in the same
+   response, which costs output tokens rather than a second round trip with the same
+   context re-sent. Unity Catalog holds one COMMENT per object, so English is what
+   gets written to the catalog and Portuguese lives in `meta.llm_suggestions` and
+   `meta.llm_table_descriptions`, where the portal reads it. Storing a language the
+   catalog cannot hold is the point: the catalog is the system of record for one
+   audience, and the portal serves the rest.
+
 Run:
     python src/agent.py               # dry run, prints the SQL it would execute
     python src/agent.py --apply       # actually writes COMMENT ON / ALTER COLUMN
@@ -75,9 +84,16 @@ otherwise" is a failure: you had the rule and discarded it for a familiar guess.
 A description that repeats what a reader already assumed adds nothing; the whole
 value of the documentation is the part that is not guessable.
 
+Write every description twice: once in English, once in Brazilian Portuguese. The
+Portuguese is a description written for a Portuguese speaker, not a word-for-word
+translation of the English -- but it must carry exactly the same facts, including any
+rule or unit the documentation states. Keep identifiers, coded values and column
+names in their original form; do not translate `wrapUpCode` or turn "F" into "final".
+
 Return JSON only:
-{"table_description": "...",
- "columns": [{"name": "...", "description": "...", "pii": "...", "type_looks_wrong": true|false,
+{"table_description": "...", "table_description_pt": "...",
+ "columns": [{"name": "...", "description": "...", "description_pt": "...",
+              "pii": "...", "type_looks_wrong": true|false,
               "grounded_in_docs": true|false}]}"""
 
 
@@ -104,10 +120,20 @@ def ensure_meta_tables(cursor, catalog: str) -> None:
         ) USING DELTA
         """
     )
-    # Tables created before grounding existed need the new columns added in place.
+    cursor.execute(
+        f"""
+        CREATE TABLE IF NOT EXISTS {catalog}.{META_SCHEMA}.llm_table_descriptions (
+            run_id STRING, scan_id STRING, generated_at TIMESTAMP,
+            table_schema STRING, table_name STRING,
+            description STRING, description_pt STRING, applied BOOLEAN
+        ) USING DELTA
+        """
+    )
+    # Tables created before these columns existed need them added in place.
     for column, dtype in (
         ("doc_system", "STRING"), ("doc_citations", "STRING"),
         ("doc_matched_terms", "STRING"), ("grounded_in_docs", "BOOLEAN"),
+        ("suggested_comment_pt", "STRING"),
     ):
         try:
             cursor.execute(
@@ -260,6 +286,7 @@ def run(catalog: str, apply: bool, use_docs: bool, meta_catalog: str | None = No
     started_at = datetime.now(timezone.utc).replace(tzinfo=None)
     prompt_tokens = completion_tokens = 0
     suggestion_rows: list[tuple] = []
+    table_rows: list[tuple] = []
     documented = grounded_tables = 0
 
     print(f"run {run_id}  model={model}  mode={'APPLY' if apply else 'DRY RUN'}")
@@ -322,8 +349,18 @@ def run(catalog: str, apply: bool, use_docs: bool, meta_catalog: str | None = No
                             "; ".join(grounding["citations"]) if grounding else None,
                             ", ".join(grounding["matched_terms"]) if grounding else None,
                             bool(suggestion.get("grounded_in_docs")) if grounding else False,
+                            (suggestion.get("description_pt") or "")[:1000] or None,
                         )
                     )
+
+                table_rows.append(
+                    (
+                        run_id, scan_id, started_at, table["schema"], table["name"],
+                        (described.get("table_description") or "")[:1000] or None,
+                        (described.get("table_description_pt") or "")[:1000] or None,
+                        bool(will_apply),
+                    )
+                )
 
             batched_insert(
                 cursor, f"{meta_catalog}.{META_SCHEMA}.llm_suggestions",
@@ -333,8 +370,15 @@ def run(catalog: str, apply: bool, use_docs: bool, meta_catalog: str | None = No
                     "pii_by_regex", "pii_by_llm", "pii_agreement",
                     "type_looks_wrong", "values_withheld", "applied",
                     "doc_system", "doc_citations", "doc_matched_terms", "grounded_in_docs",
+                    "suggested_comment_pt",
                 ],
                 suggestion_rows,
+            )
+            batched_insert(
+                cursor, f"{meta_catalog}.{META_SCHEMA}.llm_table_descriptions",
+                ["run_id", "scan_id", "generated_at", "table_schema", "table_name",
+                 "description", "description_pt", "applied"],
+                table_rows,
             )
 
             input_price = price_per_mtok("GROQ_PRICE_INPUT_PER_MTOK")

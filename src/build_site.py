@@ -99,6 +99,25 @@ def collect(catalog: str) -> dict:
                     ORDER BY table_schema, table_name, ordinal_position""",
             )
 
+            # Portuguese lives only here: Unity Catalog holds one COMMENT per object,
+            # and English is what was written to it.
+            comments_pt, table_pt = {}, {}
+            if run:
+                for schema, table, column, pt in fetch(
+                    cursor,
+                    f"""SELECT table_schema, table_name, column_name, suggested_comment_pt
+                        FROM {catalog}.{META}.llm_suggestions
+                        WHERE run_id = '{run[0]}' AND suggested_comment_pt IS NOT NULL""",
+                ):
+                    comments_pt[f"{schema}.{table}.{column}"] = pt
+                for schema, table, pt in fetch(
+                    cursor,
+                    f"""SELECT table_schema, table_name, description_pt
+                        FROM {catalog}.{META}.llm_table_descriptions
+                        WHERE run_id = '{run[0]}' AND description_pt IS NOT NULL""",
+                ):
+                    table_pt[f"{schema}.{table}"] = pt
+
             provenance = {}
             if run:
                 for schema, table, system, citations in fetch(
@@ -131,6 +150,8 @@ def collect(catalog: str) -> dict:
         "columns": columns,
         "provenance": provenance,
         "llm_pii": llm_pii,
+        "comments_pt": comments_pt,
+        "table_pt": table_pt,
         "before_score": before_score,
         "after_score": after_score,
     }
@@ -159,6 +180,7 @@ def shape(raw: dict) -> dict:
                 "name": row[2],
                 "type": row[4],
                 "comment": row[5],
+                "commentPt": raw["comments_pt"].get(f"{key}.{row[2]}"),
                 "nullRatio": float(row[6]) if row[6] is not None else None,
                 "distinct": row[7],
                 "allNull": bool(row[8]),
@@ -181,6 +203,7 @@ def shape(raw: dict) -> dict:
                 "type": row[2],
                 "owner": row[3],
                 "comment": row[4],
+                "commentPt": raw["table_pt"].get(key),
                 "rows": row[5],
                 "sizeBytes": row[6],
                 "numFiles": row[7],
@@ -209,31 +232,37 @@ def shape(raw: dict) -> dict:
     # Findings ranked by what they oblige someone to do, not by how many there are.
     findings = []
     for table in tables:
-        if table["piiCount"]:
+        n = table["piiCount"]
+        if n:
             findings.append({
                 "severity": "high", "table": table["key"],
-                "what": f"{table['piiCount']} personal-data column"
-                        f"{'s' if table['piiCount'] > 1 else ''}",
+                "what": f"{n} personal-data column{'s' if n > 1 else ''}",
+                "whatPt": f"{n} coluna{'s' if n > 1 else ''} com dado pessoal",
                 "why": "needs a masking policy and a retention decision",
+                "whyPt": "exige política de mascaramento e decisão de retenção",
             })
         if table["orphan"]:
             findings.append({
                 "severity": "medium", "table": table["key"],
-                "what": "never read",
+                "what": "never read", "whatPt": "nunca lida",
                 "why": f"{human_bytes(table['sizeBytes'])} nobody has queried",
+                "whyPt": f"{human_bytes(table['sizeBytes'])} que ninguém consultou",
             })
-        if table["deadCount"]:
+        d = table["deadCount"]
+        if d:
             findings.append({
                 "severity": "low", "table": table["key"],
-                "what": f"{table['deadCount']} dead column"
-                        f"{'s' if table['deadCount'] > 1 else ''}",
+                "what": f"{d} dead column{'s' if d > 1 else ''}",
+                "whatPt": f"{d} coluna{'s' if d > 1 else ''} morta{'s' if d > 1 else ''}",
                 "why": "always null or a single repeated value",
+                "whyPt": "sempre nula ou com um único valor repetido",
             })
         if table["fragmented"]:
             findings.append({
                 "severity": "low", "table": table["key"],
-                "what": "fragmented",
+                "what": "fragmented", "whatPt": "fragmentada",
                 "why": f"{table['numFiles']} files for {human_bytes(table['sizeBytes'])}",
+                "whyPt": f"{table['numFiles']} arquivos para {human_bytes(table['sizeBytes'])}",
             })
     order = {"high": 0, "medium": 1, "low": 2}
     findings.sort(key=lambda f: (order[f["severity"]], f["table"]))
@@ -404,8 +433,17 @@ a { color: var(--accent); }
 /* sidebar */
 .sidebar { background: var(--sidebar); border-right: 1px solid var(--line); display: flex; flex-direction: column; overflow: hidden; }
 .brand { padding: 16px 16px 12px; border-bottom: 1px solid var(--line); }
+.brand { display: flex; align-items: flex-start; gap: 8px; }
+.brand .who { flex: 1; min-width: 0; }
 .brand h1 { margin: 0; font-size: 14px; letter-spacing: .01em; }
 .brand .sub { color: var(--faint); font-size: 11px; font-family: var(--mono); margin-top: 3px; }
+.lang { display: flex; border: 1px solid var(--line); border-radius: 5px; overflow: hidden; flex: none; }
+.lang button {
+  background: none; border: none; color: var(--faint); font-family: var(--mono);
+  font-size: 10.5px; padding: 3px 7px; cursor: pointer; letter-spacing: .04em;
+}
+.lang button.on { background: var(--accent-dim); color: var(--accent); }
+.lang button:hover:not(.on) { color: var(--text); }
 .search { padding: 10px 12px; }
 .search input {
   width: 100%; padding: 7px 10px; background: var(--surface); border: 1px solid var(--line);
@@ -566,12 +604,18 @@ table.cols tr:hover td { background: var(--surface); }
 <button class="burger" id="burger" aria-label="Toggle navigation">☰</button>
 <nav class="sidebar" id="sidebar">
   <div class="brand">
-    <h1>__CATALOG__</h1>
-    <div class="sub">scan __SCAN__ · __GENERATED__</div>
+    <div class="who">
+      <h1>__CATALOG__</h1>
+      <div class="sub">scan __SCAN__ · __GENERATED__</div>
+    </div>
+    <div class="lang" id="lang">
+      <button data-lang="en" class="on">EN</button><button data-lang="pt">PT</button>
+    </div>
   </div>
   <div class="search"><input id="q" type="search" placeholder="Search tables and columns" autocomplete="off"></div>
   <div class="nav" id="nav"></div>
-  <div class="sidefoot">Generated by <a href="__REPO__" target="_blank" rel="noopener">lakehouse-governance-agent</a></div>
+  <div class="sidefoot"><span id="genby">Generated by</span>
+    <a href="__REPO__" target="_blank" rel="noopener">lakehouse-governance-agent</a></div>
 </nav>
 <main class="main" id="main"><div class="wrap" id="content"></div></main>
 <script id="payload" type="application/json">__DATA__</script>
@@ -581,6 +625,50 @@ const DATA = JSON.parse(document.getElementById('payload').textContent);
 const DOCS = JSON.parse(document.getElementById('docs').textContent);
 const nav = document.getElementById('nav'), content = document.getElementById('content');
 let current = {view: 'overview'}, filter = '';
+
+// Both languages come out of the same model call. Only English reaches Unity
+// Catalog, which holds one COMMENT per object; Portuguese exists here.
+let lang = (() => { try { return localStorage.getItem('lang') || 'en'; } catch { return 'en'; } })();
+const STR = {
+  en: {
+    overview: 'Overview', sources: 'Source documentation', search: 'Search tables and columns',
+    title: 'Catalog documentation',
+    lede: 'Every description here was generated from the data <em>and</em> from the documentation of the system each table came from. Open a table to see which passages produced its descriptions.',
+    score: 'catalog health score', scoreSub: ',<br>before and after one run',
+    coverage: 'Coverage by schema', findings: 'Findings',
+    findingsHint: n => `${n} open, ranked by what they oblige someone to do`,
+    documented: 'columns documented', piiCols: 'personal-data columns',
+    neverRead: 'never read', deadCols: 'dead columns', fragmented: 'fragmented tables',
+    colCol: 'Column', colType: 'Type', colDesc: 'Description', colProfile: 'Profile',
+    notDocumented: 'not documented', rows: 'rows', columns: 'columns', files: 'files',
+    lastRead: 'last read', groundedIn: 'Grounded in', noDocs: 'No source documentation mapped to this table.',
+    sourceDoc: 'source documentation', distinct: 'distinct', nullPct: 'null',
+    note: 'A dot beside a table marks personal data (§PII§) or a table nothing has read (§ORPHAN§). The score stops short of 100 on purpose: what remains are not documentation problems but decisions a person has to make. Snapshot of scan §SCAN§, not a live view.',
+    generatedBy: 'Generated by',
+    runline: r => `<strong>${r.comments} comments</strong> written to Unity Catalog across ${r.tables} tables in <strong>${r.seconds}s</strong>, using <strong>${(r.promptTokens + r.completionTokens).toLocaleString()}</strong> tokens — <strong>$${r.cost.toFixed(4)}</strong> at list price, in English and Portuguese. Modelled, not billed: the run was made on a free tier that charges nothing.`,
+    sev: {high: 'high', medium: 'medium', low: 'low'},
+  },
+  pt: {
+    overview: 'Visão geral', sources: 'Documentação de origem', search: 'Buscar tabelas e colunas',
+    title: 'Documentação do catálogo',
+    lede: 'Cada descrição aqui foi gerada a partir do dado <em>e</em> da documentação do sistema de origem de cada tabela. Abra uma tabela para ver quais trechos produziram suas descrições.',
+    score: 'índice de saúde do catálogo', scoreSub: ',<br>antes e depois de uma execução',
+    coverage: 'Cobertura por schema', findings: 'Achados',
+    findingsHint: n => `${n} em aberto, ordenados pelo que exigem de alguém`,
+    documented: 'colunas documentadas', piiCols: 'colunas com dado pessoal',
+    neverRead: 'nunca lidas', deadCols: 'colunas mortas', fragmented: 'tabelas fragmentadas',
+    colCol: 'Coluna', colType: 'Tipo', colDesc: 'Descrição', colProfile: 'Perfil',
+    notDocumented: 'sem documentação', rows: 'linhas', columns: 'colunas', files: 'arquivos',
+    lastRead: 'última leitura', groundedIn: 'Ancorada em', noDocs: 'Nenhuma documentação de origem mapeada para esta tabela.',
+    sourceDoc: 'documentação de origem', distinct: 'distintos', nullPct: 'nulos',
+    note: 'Um ponto ao lado da tabela indica dado pessoal (§PII§) ou tabela que ninguém leu (§ORPHAN§). O índice para antes de 100 de propósito: o que resta não são problemas de documentação, e sim decisões que cabem a uma pessoa. Retrato do scan §SCAN§, não uma visão ao vivo.',
+    generatedBy: 'Gerado por',
+    runline: r => `<strong>${r.comments} comentários</strong> escritos no Unity Catalog em ${r.tables} tabelas em <strong>${r.seconds}s</strong>, usando <strong>${(r.promptTokens + r.completionTokens).toLocaleString()}</strong> tokens — <strong>$${r.cost.toFixed(4)}</strong> a preço de tabela, em inglês e português. Modelado, não faturado: a execução foi feita em plano gratuito, que não cobra.`,
+    sev: {high: 'alta', medium: 'média', low: 'baixa'},
+  },
+};
+const T = () => STR[lang];
+const desc = o => (lang === 'pt' && o.commentPt) ? o.commentPt : o.comment;
 
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const bytes = n => {
@@ -600,7 +688,7 @@ function renderNav() {
   const schemas = {};
   DATA.tables.filter(matches).forEach(t => (schemas[t.schema] ??= []).push(t));
   let html = `<div class="group"><button class="item ${current.view === 'overview' ? 'active' : ''}"
-      data-view="overview"><span class="hash">≡</span> Overview</button></div>`;
+      data-view="overview"><span class="hash">≡</span> ${T().overview}</button></div>`;
   for (const [schema, tables] of Object.entries(schemas)) {
     html += `<div class="group"><div class="group-label">${esc(schema)}</div>`;
     tables.forEach(t => {
@@ -613,7 +701,7 @@ function renderNav() {
     html += '</div>';
   }
   if (DOCS.length) {
-    html += '<div class="group"><div class="group-label">Source documentation</div>';
+    html += `<div class="group"><div class="group-label">${T().sources}</div>`;
     DOCS.forEach(d => {
       const active = current.view === 'doc' && current.key === d.id;
       html += `<button class="item ${active ? 'active' : ''}" data-view="doc" data-key="${esc(d.id)}">
@@ -633,7 +721,7 @@ function renderOverview() {
       ${DATA.beforeScore !== null ? `<div class="v was">${DATA.beforeScore}</div>
         <div class="arrow">&rarr;</div>` : ''}
       <div class="v now">${DATA.afterScore}</div>
-      <div class="cap">catalog health score${DATA.beforeScore !== null ? ',<br>before and after one run' : ''}</div>
+      <div class="cap">${T().score}${DATA.beforeScore !== null ? T().scoreSub : ''}</div>
     </div>`;
 
   const coverage = DATA.schemaCoverage.map(c => {
@@ -644,47 +732,42 @@ function renderOverview() {
   }).join('');
 
   const findings = DATA.findings.map(f => `<tr>
-      <td class="sev ${f.severity}">${f.severity}</td>
+      <td class="sev ${f.severity}">${T().sev[f.severity]}</td>
       <td class="tbl"><a href="#table/${encodeURIComponent(f.table)}">${esc(f.table)}</a></td>
-      <td>${esc(f.what)}</td>
-      <td class="why">${esc(f.why)}</td>
+      <td>${esc(lang === 'pt' && f.whatPt ? f.whatPt : f.what)}</td>
+      <td class="why">${esc(lang === 'pt' && f.whyPt ? f.whyPt : f.why)}</td>
     </tr>`).join('');
+
+  const note = T().note
+    .replace('§PII§', '<span class="dot pii"></span>')
+    .replace('§ORPHAN§', '<span class="dot orphan"></span>')
+    .replace('§SCAN§', esc(DATA.scanId));
 
   content.innerHTML = `
     <div class="hero">
       <div class="eyebrow">${esc(DATA.catalog)}</div>
-      <h2>Catalog documentation</h2>
-      <p class="lede">Every description here was generated from the data <em>and</em> from the
-        documentation of the system each table came from. Open a table to see which passages
-        produced its descriptions.</p>
+      <h2>${T().title}</h2>
+      <p class="lede">${T().lede}</p>
       ${scoreBlock}
-      ${r ? `<div class="runline">
-        <strong>${r.comments} comments</strong> written to Unity Catalog across ${r.tables} tables
-        in <strong>${r.seconds}s</strong>, using
-        <strong>${(r.promptTokens + r.completionTokens).toLocaleString()}</strong> tokens —
-        <strong>$${r.cost.toFixed(4)}</strong> at list price for <code>${esc(r.model)}</code>.
-        Modelled, not billed: the run was made on a free tier that charges nothing.</div>` : ''}
+      ${r ? `<div class="runline">${T().runline(r)}</div>` : ''}
     </div>
 
-    <div class="sec"><h3>Coverage by schema</h3></div>
+    <div class="sec"><h3>${T().coverage}</h3></div>
     <div class="cov">${coverage}</div>
 
-    <div class="sec"><h3>Findings</h3>
-      <span class="hint">${DATA.findings.length} open, ranked by what they oblige someone to do</span></div>
+    <div class="sec"><h3>${T().findings}</h3>
+      <span class="hint">${T().findingsHint(DATA.findings.length)}</span></div>
     <table class="find"><tbody>${findings}</tbody></table>
 
     <div class="cards" style="margin-top:26px">
-      <div class="card good"><div class="n">${pct}%</div><div class="l">columns documented</div></div>
-      <div class="card pii"><div class="n">${s.piiColumns}</div><div class="l">personal-data columns</div></div>
-      <div class="card warn"><div class="n">${s.orphans}</div><div class="l">never read</div></div>
-      <div class="card warn"><div class="n">${s.dead}</div><div class="l">dead columns</div></div>
-      <div class="card warn"><div class="n">${s.fragmented}</div><div class="l">fragmented tables</div></div>
+      <div class="card good"><div class="n">${pct}%</div><div class="l">${T().documented}</div></div>
+      <div class="card pii"><div class="n">${s.piiColumns}</div><div class="l">${T().piiCols}</div></div>
+      <div class="card warn"><div class="n">${s.orphans}</div><div class="l">${T().neverRead}</div></div>
+      <div class="card warn"><div class="n">${s.dead}</div><div class="l">${T().deadCols}</div></div>
+      <div class="card warn"><div class="n">${s.fragmented}</div><div class="l">${T().fragmented}</div></div>
     </div>
 
-    <div class="note">A dot beside a table marks personal data
-      (<span class="dot pii"></span>) or a table nothing has read (<span class="dot orphan"></span>).
-      The score stops short of 100 on purpose: what remains are not documentation problems but
-      decisions a person has to make. Snapshot of scan ${esc(DATA.scanId)}, not a live view.</div>`;
+    <div class="note">${note}</div>`;
 }
 
 function renderTable(key) {
@@ -696,12 +779,13 @@ function renderTable(key) {
       c.allNull ? '<span class="badge dead">100% null</span>' : '',
       c.constant ? '<span class="badge dead">single value</span>' : '',
     ].join('');
-    const nulls = c.nullRatio !== null ? `${Math.round(c.nullRatio * 100)}% null` : '';
+    const nulls = c.nullRatio !== null ? `${Math.round(c.nullRatio * 100)}% ${T().nullPct}` : '';
+    const text = desc(c);
     return `<tr>
       <td class="cname">${esc(c.name)}</td>
       <td class="ctype">${esc(c.type)}</td>
-      <td class="ccomment ${c.comment ? '' : 'missing'}">${esc(c.comment || 'not documented')}${flags ? '<div>' + flags + '</div>' : ''}</td>
-      <td class="stat">${esc(nulls)}<br>${c.distinct !== null ? esc(c.distinct) + ' distinct' : ''}</td>
+      <td class="ccomment ${text ? '' : 'missing'}">${esc(text || T().notDocumented)}${flags ? '<div>' + flags + '</div>' : ''}</td>
+      <td class="stat">${esc(nulls)}<br>${c.distinct !== null ? esc(c.distinct) + ' ' + T().distinct : ''}</td>
     </tr>`;
   }).join('');
 
@@ -711,19 +795,19 @@ function renderTable(key) {
     <h2>${esc(t.name)}</h2>
     <div class="meta">
       <span class="badge type">${esc(t.type)}</span>
-      <span>${(t.rows ?? 0).toLocaleString()} rows</span>
-      <span>${t.columns.length} columns</span>
-      <span>${bytes(t.sizeBytes)}${t.numFiles ? ' in ' + t.numFiles + ' files' : ''}</span>
-      ${t.orphan ? '<span style="color:var(--warn)">never read</span>'
-                 : (t.lastRead ? '<span>last read ' + esc(t.lastRead.slice(0, 10)) + '</span>' : '')}
-      ${t.fragmented ? '<span style="color:var(--warn)">fragmented</span>' : ''}
+      <span>${(t.rows ?? 0).toLocaleString()} ${T().rows}</span>
+      <span>${t.columns.length} ${T().columns}</span>
+      <span>${bytes(t.sizeBytes)}${t.numFiles ? ' / ' + t.numFiles + ' ' + T().files : ''}</span>
+      ${t.orphan ? `<span style="color:var(--warn)">${T().neverRead}</span>`
+                 : (t.lastRead ? `<span>${T().lastRead} ${esc(t.lastRead.slice(0, 10))}</span>` : '')}
+      ${t.fragmented ? `<span style="color:var(--warn)">${T().fragmented}</span>` : ''}
     </div>
-    ${t.comment ? `<div class="desc">${esc(t.comment)}</div>` : ''}
-    ${p ? `<div class="prov">Grounded in <strong>${esc(p.system)}</strong>:
+    ${desc(t) ? `<div class="desc">${esc(desc(t))}</div>` : ''}
+    ${p ? `<div class="prov">${T().groundedIn} <strong>${esc(p.system)}</strong>:
         ${p.passages.map(x => `<span class="passage" data-doc="${esc(p.system)}">${esc(x.split(':').slice(1).join(':').trim() || x)}</span>`).join('')}
-      </div>` : '<div class="prov" style="color:var(--faint)">No source documentation mapped to this table.</div>'}
+      </div>` : `<div class="prov" style="color:var(--faint)">${T().noDocs}</div>`}
     <table class="cols">
-      <thead><tr><th>Column</th><th>Type</th><th>Description</th><th>Profile</th></tr></thead>
+      <thead><tr><th>${T().colCol}</th><th>${T().colType}</th><th>${T().colDesc}</th><th>${T().colProfile}</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
 }
@@ -731,10 +815,21 @@ function renderTable(key) {
 function renderDoc(id) {
   const d = DOCS.find(x => x.id === id);
   if (!d) return renderOverview();
-  content.innerHTML = `<div class="crumb">source documentation</div><div class="doc">${d.html}</div>`;
+  content.innerHTML = `<div class="crumb">${T().sourceDoc}</div><div class="doc">${d.html}</div>`;
+}
+
+// Source documents are the vendor's words. Translating them would defeat the point
+// of grounding, so they stay as written and only the chrome around them switches.
+function applyLanguage() {
+  document.getElementById('q').placeholder = T().search;
+  document.documentElement.lang = lang === 'pt' ? 'pt-BR' : 'en';
+  document.getElementById('genby').textContent = T().generatedBy;
+  document.querySelectorAll('#lang button').forEach(b =>
+    b.classList.toggle('on', b.dataset.lang === lang));
 }
 
 function render() {
+  applyLanguage();
   renderNav();
   if (current.view === 'table') renderTable(current.key);
   else if (current.view === 'doc') renderDoc(current.key);
@@ -772,6 +867,13 @@ content.addEventListener('click', e => {
 });
 document.getElementById('q').addEventListener('input', e => { filter = e.target.value; renderNav(); });
 document.getElementById('burger').addEventListener('click', () => sidebar.classList.toggle('open'));
+document.getElementById('lang').addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (!b || b.dataset.lang === lang) return;
+  lang = b.dataset.lang;
+  try { localStorage.setItem('lang', lang); } catch {}
+  render();
+});
 window.addEventListener('popstate', () => { current = fromHash(); render(); });
 
 current = fromHash();
