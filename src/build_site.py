@@ -732,6 +732,48 @@ body::after {
 .tile.warn .n { color: var(--warn); }
 .tile.pii .n { color: var(--pii); }
 
+/* Results.
+   These styles were deleted by accident when the old ask panel was removed, and the
+   answers came out as bare paragraphs -- a wall of text, where the whole job is
+   scanning for one column. Rebuilt to match the tiles: one row per hit, the path in
+   the accent colour, the description under it, and a header saying what is on screen
+   with a way back out. */
+.answer { margin-top: 6px; }
+.rescap {
+  display: flex; align-items: baseline; gap: 10px; margin: 4px 0 8px;
+  padding-bottom: 8px; border-bottom: 1px solid var(--line);
+}
+.rescap .n {
+  font-family: var(--mono); font-size: 11px; letter-spacing: .09em;
+  text-transform: uppercase; color: var(--faint);
+}
+.rescap .n b { color: var(--accent); font-weight: 600; }
+.rescap .clear {
+  margin-left: auto; background: none; border: 1px solid var(--line); color: var(--muted);
+  border-radius: 16px; padding: 3px 11px; font-size: 11.5px; cursor: pointer; font-family: inherit;
+}
+.rescap .clear:hover { border-color: var(--accent); color: var(--accent); }
+
+.hits { display: grid; gap: 2px; }
+.hit {
+  padding: 9px 12px; border-radius: 8px; border: 1px solid transparent;
+  transition: background .12s, border-color .12s;
+}
+.hit:hover { background: rgba(255,255,255,.026); border-color: var(--line); }
+.hit .where {
+  font-family: var(--mono); font-size: 12.5px; color: var(--accent);
+  cursor: pointer; display: inline-block;
+}
+.hit .where:hover { text-decoration: underline; }
+.hit .what { color: var(--muted); font-size: 13px; margin-top: 2px; line-height: 1.5; }
+.answer .none { color: var(--faint); font-size: 13.5px; padding: 14px 12px; }
+.answer .note {
+  color: var(--faint); font-size: 11.5px; line-height: 1.55; margin-top: 12px;
+  padding-top: 10px; border-top: 1px solid var(--line-soft);
+}
+.answer .note .where { color: var(--muted); cursor: pointer; font-family: var(--mono); }
+.answer .note .where:hover { color: var(--accent); }
+
 .mission .answer { margin-top: 4px; }
 
 @media (max-width: 940px) {
@@ -997,6 +1039,7 @@ const STR = {
     tilePii: 'columns a masking policy has to cover',
     tileOrphan: 'tables nothing has queried',
     tileDead: 'always null, or one value on every row',
+    clear: 'clear',
     askDocs: 'Also in:',
     chipPii: 'personal data', chipOrphan: 'never read', chipDead: 'dead columns',
     askFacetNote: 'A filter over what the crawler recorded, not a search.',
@@ -1031,6 +1074,15 @@ const STR = {
     mColumns: 'colunas',
     mDocs: 'documentos de origem',
     mPii: 'com dado pessoal',
+    sceneAlt: 'Um pequeno astronauta caminhando numa lua.',
+    mTable1: 'tabela',
+    tileGrounds: 'ancora',
+    tileUnused: 'nenhuma tabela mapeada para ela',
+    tileHint: 'a documentação em que cada descrição foi ancorada',
+    tilePii: 'colunas que uma política de mascaramento precisa cobrir',
+    tileOrphan: 'tabelas que ninguém consultou',
+    tileDead: 'sempre nulas, ou com um valor só em todas as linhas',
+    clear: 'limpar',
     askDocs: 'Também em:',
     chipPii: 'dado pessoal', chipOrphan: 'nunca lidas', chipDead: 'colunas mortas',
     askFacetNote: 'Um filtro sobre o que o crawler registrou, não uma busca.',
@@ -1165,13 +1217,26 @@ const FACETS = {
   orphan: t => t.orphan ? [{table: t.key, column: '', text: desc(t) || ''}] : [],
 };
 
+function hitRow(h) {
+  return `<div class="hit">
+    <span class="where" data-go="${esc(h.table)}">${esc(h.table)}${h.column ? '.' + esc(h.column) : ''}</span>
+    <div class="what">${esc(h.text || '')}</div></div>`;
+}
+
+function resultHeader(count, label) {
+  return `<div class="rescap">
+    <span class="n"><b>${count}</b> ${esc(label)}</span>
+    <button class="clear" data-clear="1">${T().clear}</button></div>`;
+}
+
 function renderFacet(name) {
   const box = document.getElementById('answer');
   showingAnswer(true);
   const rows = DATA.tables.flatMap(FACETS[name]);
-  box.innerHTML = `<div class="answer">${rows.map(h => `<div class="hit">
-      <span class="where" data-go="${esc(h.table)}">${esc(h.table)}${h.column ? '.' + esc(h.column) : ''}</span>
-      <div class="what">${esc(h.text)}</div></div>`).join('')}
+  const label = {pii: T().chipPii, orphan: T().chipOrphan, dead: T().chipDead}[name];
+  box.innerHTML = `<div class="answer">
+    ${resultHeader(rows.length, label)}
+    <div class="hits">${rows.map(hitRow).join('')}</div>
     <div class="note">${T().askFacetNote}</div></div>`;
 }
 
@@ -1186,15 +1251,15 @@ function renderAnswer(query) {
   showingAnswer(true);
   const {columns, docs} = askLocally(query);
   if (!columns.length && !docs.length) {
-    box.innerHTML = `<div class="answer"><div class="none">${T().askNone}</div></div>`;
+    box.innerHTML = `<div class="answer">${resultHeader(0, T().mColumns)}
+      <div class="none">${T().askNone}</div></div>`;
     return;
   }
-  const hits = columns.map(h => `<div class="hit">
-      <span class="where" data-go="${esc(h.table)}">${esc(h.table)}.${esc(h.column)}</span>
-      <div class="what">${esc(h.text)}</div></div>`).join('');
   const sources = docs.map(d =>
-    `<span class="where" data-doc="${esc(d.id)}">§ ${esc(d.id)}</span>`).join(' · ');
-  box.innerHTML = `<div class="answer">${hits}
+    `<span class="where" data-doc="${esc(d.id)}">\u00a7 ${esc(d.id)}</span>`).join(' \u00b7 ');
+  box.innerHTML = `<div class="answer">
+    ${resultHeader(columns.length, T().mColumns)}
+    <div class="hits">${columns.map(hitRow).join('')}</div>
     ${sources ? `<div class="note">${T().askDocs} ${sources}</div>` : ''}
     <div class="note">${T().askNote}</div></div>`;
 }
@@ -1578,6 +1643,13 @@ nav.addEventListener('click', e => {
 content.addEventListener('click', e => {
   const passage = e.target.closest('.passage');
   if (passage) return go({view: 'doc', key: passage.dataset.doc});
+  if (e.target.closest('[data-clear]')) {
+    document.getElementById('answer').innerHTML = '';
+    showingAnswer(false);
+    const q = document.getElementById('askq');
+    if (q) q.value = '';
+    return;
+  }
   const chip = e.target.closest('[data-facet]');
   if (chip) return renderFacet(chip.dataset.facet);
   const pill = e.target.closest('[data-q]');
