@@ -597,33 +597,77 @@ body::after {
   .drift { animation: none; }
 }
 
-/* the ask view -- the page that has to sell the project in ten seconds. */
-.mission { padding: 8px 0 40px; }
-.stage {
-  position: relative; display: flex; justify-content: center; align-items: center;
-  height: 260px; margin-bottom: 4px;
+/* the ask view -- the page that has to sell the project in ten seconds.
+
+   The astronaut is rigged: shoulders and hips are their own pivots, so limbs swing
+   rather than the whole sprite tilting. He stays at the top of the moon and the moon
+   turns underneath him, which is both easier to keep smooth than moving him along an
+   arc and the reason the walk reads as walking rather than sliding.
+
+   A small state machine picks what he does next. Everything stops flat under
+   prefers-reduced-motion -- a character idling in the corner of the eye is exactly
+   the kind of motion that makes a page unusable for some readers. */
+.scene { position: relative; height: 262px; margin: 0 0 4px; }
+.scene svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.scene .corona {
+  position: absolute; left: 50%; top: 46%; width: 380px; height: 380px; margin: -190px 0 0 -190px;
+  border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle, rgba(94,234,212,.10) 0%, rgba(94,234,212,.03) 45%, transparent 68%);
 }
-.stage .sun {
-  position: absolute; width: 320px; height: 320px; border-radius: 50%;
-  background: radial-gradient(circle, rgba(94,234,212,.20) 0%, rgba(94,234,212,.06) 42%, transparent 68%);
+
+.rig { transform-box: fill-box; transform-origin: 50% 100%; }
+.limb { transform-box: fill-box; }
+.arm-l, .arm-r { transform-origin: 50% 8%; }
+.leg-l, .leg-r { transform-origin: 50% 6%; }
+.head { transform-origin: 50% 88%; }
+
+@keyframes swingA { 0%,100% { transform: rotate(21deg); } 50% { transform: rotate(-21deg); } }
+@keyframes swingB { 0%,100% { transform: rotate(-21deg); } 50% { transform: rotate(21deg); } }
+@keyframes armA   { 0%,100% { transform: rotate(-16deg); } 50% { transform: rotate(16deg); } }
+@keyframes armB   { 0%,100% { transform: rotate(16deg); } 50% { transform: rotate(-16deg); } }
+@keyframes bob    { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-1.6px); } }
+
+.walk .leg-l { animation: swingA .68s ease-in-out infinite; }
+.walk .leg-r { animation: swingB .68s ease-in-out infinite; }
+.walk .arm-l { animation: armB .68s ease-in-out infinite; }
+.walk .arm-r { animation: armA .68s ease-in-out infinite; }
+.walk .rig   { animation: bob .34s ease-in-out infinite; }
+
+@keyframes hop {
+  0% { transform: translateY(0); } 30% { transform: translateY(-42px); }
+  52% { transform: translateY(-46px); } 100% { transform: translateY(0); }
 }
-.stage .orbit {
-  position: absolute; width: 300px; height: 300px; border-radius: 50%;
-  border: 1px solid rgba(94,234,212,.18); border-top-color: rgba(94,234,212,.42);
-  animation: spin 26s linear infinite;
+@keyframes tuck { 0%,100% { transform: rotate(0); } 40% { transform: rotate(34deg); } }
+@keyframes reach { 0%,100% { transform: rotate(0); } 40% { transform: rotate(-128deg); } }
+.hop .rig { animation: hop 1.5s cubic-bezier(.34,0,.28,1); }
+.hop .leg-l, .hop .leg-r { animation: tuck 1.5s cubic-bezier(.34,0,.28,1); }
+.hop .arm-l, .hop .arm-r { animation: reach 1.5s cubic-bezier(.34,0,.28,1); }
+
+@keyframes waving { 0%,100% { transform: rotate(-136deg); } 50% { transform: rotate(-98deg); } }
+.wave .arm-r { animation: waving .46s ease-in-out 5; }
+
+@keyframes peek { 0%,100% { transform: rotate(0); } 25% { transform: rotate(-11deg); } 75% { transform: rotate(11deg); } }
+.look .head { animation: peek 2.6s ease-in-out; }
+
+@keyframes breathe { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-1.1px); } }
+.idle .rig { animation: breathe 3.4s ease-in-out infinite; }
+
+@keyframes puff { 0% { opacity: .38; transform: translate(0,0) scale(.5); } 100% { opacity: 0; transform: translate(var(--dx),-9px) scale(1.5); } }
+.dust { opacity: 0; }
+.walk .dust { animation: puff .68s linear infinite; }
+.dust.b { animation-delay: .34s; }
+
+@keyframes bubblein {
+  0% { opacity: 0; transform: translateY(5px) scale(.6); }
+  16% { opacity: 1; transform: translateY(0) scale(1); }
+  80% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-7px) scale(.9); }
 }
-.stage .orbit.two {
-  width: 218px; height: 218px; border-color: rgba(255,255,255,.07);
-  border-left-color: rgba(255,255,255,.20); animation-duration: 17s; animation-direction: reverse;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
-.stage .naut-big { position: relative; width: 132px; height: 132px; animation: float 6s ease-in-out infinite; }
-.stage .rock {
-  position: absolute; right: 16%; bottom: 8%; width: 62px; height: 62px; opacity: .8;
-  animation: float 8s ease-in-out infinite reverse;
-}
+.bubble { transform-box: fill-box; transform-origin: 50% 100%; opacity: 0; }
+.bubble.show { animation: bubblein 2.1s ease-out; }
+
 @media (prefers-reduced-motion: reduce) {
-  .stage .orbit, .stage .naut-big, .stage .rock { animation: none; }
+  .rig, .limb, .head, .dust, .bubble, .moon-spin { animation: none !important; }
 }
 
 .mission h2 {
@@ -883,6 +927,7 @@ const STR = {
     mColumns: 'columns',
     mDocs: 'source documents',
     mPii: 'carrying personal data',
+    sceneAlt: 'A small astronaut walking on a moon.',
     askDocs: 'Also in:',
     chipPii: 'personal data', chipOrphan: 'never read', chipDead: 'dead columns',
     askFacetNote: 'A filter over what the crawler recorded, not a search.',
@@ -1101,28 +1146,157 @@ function renderAnswer(query) {
     <div class="note">${T().askNote}</div></div>`;
 }
 
+// The moon scene. Every part that has to move is its own group with its own pivot:
+// a sprite that only translates reads as sliding, and the difference between that
+// and a walk lives entirely in the hips and shoulders.
+function moonScene() {
+  const MX = 240, MY = 302, MR = 126;   // moon centre and radius, in view units
+  const craters = [
+    [-58, -78, 13], [42, -92, 9], [88, -34, 16], [-96, -18, 10],
+    [8, -122, 7], [-26, -104, 5], [66, 22, 12], [-72, 34, 8],
+  ].map(([dx, dy, r]) =>
+    `<circle cx="${MX + dx}" cy="${MY + dy}" r="${r}" fill="#0f1319" opacity=".55"/>
+     <circle cx="${MX + dx - r * .18}" cy="${MY + dy - r * .18}" r="${r * .82}" fill="#20262f" opacity=".7"/>`
+  ).join('');
+
+  return `<div class="scene" id="scene">
+    <div class="corona"></div>
+    <svg viewBox="0 0 480 262" role="img" aria-label="${T().sceneAlt}">
+      <defs>
+        <linearGradient id="suit" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#f6f8fc"/><stop offset="1" stop-color="#c2c9db"/>
+        </linearGradient>
+        <linearGradient id="visor" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#1d3f4a"/><stop offset="1" stop-color="#0b191f"/>
+        </linearGradient>
+        <radialGradient id="moonface" cx="36%" cy="24%">
+          <stop offset="0" stop-color="#3a4250"/><stop offset="1" stop-color="#171b22"/>
+        </radialGradient>
+      </defs>
+
+      <g id="moonspin">
+        <circle cx="${MX}" cy="${MY}" r="${MR}" fill="url(#moonface)"/>
+        ${craters}
+      </g>
+      <ellipse cx="${MX}" cy="${MY - MR + 3}" rx="66" ry="7" fill="#000" opacity=".28"/>
+
+      <g transform="translate(${MX} ${MY - MR + 4})">
+        <circle class="dust" cx="-12" cy="-1.5" r="1.7" fill="#8b929e" style="--dx:-8px"/>
+        <circle class="dust b" cx="11" cy="-1.5" r="1.4" fill="#8b929e" style="--dx:8px"/>
+
+        <g class="rig" id="rig">
+          <g transform="translate(-7 -17)"><g class="limb leg-l">
+            <rect x="-4.2" y="0" width="8.4" height="18" rx="4.2" fill="url(#suit)"/>
+            <rect x="-5" y="12" width="10" height="6" rx="3" fill="#9aa2b4"/>
+          </g></g>
+          <g transform="translate(7 -17)"><g class="limb leg-r">
+            <rect x="-4.2" y="0" width="8.4" height="18" rx="4.2" fill="url(#suit)"/>
+            <rect x="-5" y="12" width="10" height="6" rx="3" fill="#9aa2b4"/>
+          </g></g>
+
+          <rect x="-16" y="-46" width="32" height="17" rx="8" fill="#aab2c6"/>
+          <g transform="translate(-15 -42)"><g class="limb arm-l">
+            <rect x="-4" y="0" width="8" height="17" rx="4" fill="url(#suit)"/>
+            <circle cx="0" cy="16" r="4.4" fill="#9aa2b4"/>
+          </g></g>
+          <g transform="translate(15 -42)"><g class="limb arm-r">
+            <rect x="-4" y="0" width="8" height="17" rx="4" fill="url(#suit)"/>
+            <circle cx="0" cy="16" r="4.4" fill="#9aa2b4"/>
+          </g></g>
+
+          <rect x="-14" y="-47" width="28" height="31" rx="12" fill="url(#suit)"/>
+          <rect x="-7" y="-39" width="14" height="9" rx="3.4" fill="#aeb6c8" opacity=".8"/>
+          <circle cx="-3" cy="-34.5" r="1.6" fill="#5eead4"/>
+          <circle cx="3" cy="-34.5" r="1.6" fill="#fab219"/>
+
+          <g class="head" id="head">
+            <circle cx="0" cy="-62" r="17" fill="url(#suit)"/>
+            <path d="M-11.5 -62a11.5 11.5 0 0 1 23 0 11.5 11.5 0 0 1-23 0z" fill="url(#visor)"/>
+            <path d="M-8 -67c2.2-3.4 6.4-5 9.6-4.4" stroke="#5eead4" stroke-width="2.2"
+              stroke-linecap="round" fill="none" opacity=".85"/>
+            <circle cx="7" cy="-58" r="2.3" fill="#fff" opacity=".2"/>
+          </g>
+
+          <g class="bubble" id="bubble" transform="translate(24 -86)">
+            <rect x="-15" y="-15" width="30" height="26" rx="9" fill="#1c2027" stroke="#2f3540"/>
+            <path d="M-5 11l5 7 5-7z" fill="#1c2027"/>
+            <text id="bubbletext" x="0" y="3" text-anchor="middle" font-size="15" fill="#e6e8ec">*</text>
+          </g>
+        </g>
+      </g>
+    </svg>
+  </div>`;
+}
+
+// An idle character looping one animation reads as a screensaver. Picking the next
+// action at random, with pauses of uneven length, is what makes it read as someone
+// who is actually there.
+const EMOTES = ['\u2726', '\u2605', '?', '!', '\u266a', '\u263a', '\u263e', '\u2301'];
+let sceneTimer = null, moonAngle = 0, moonSpeed = 0, rafId = null;
+
+function stopScene() {
+  clearTimeout(sceneTimer);
+  cancelAnimationFrame(rafId);
+  sceneTimer = null; rafId = null; moonSpeed = 0;
+}
+
+function startScene() {
+  const scene = document.getElementById('scene');
+  const moon = document.getElementById('moonspin');
+  const bubble = document.getElementById('bubble');
+  const bubbleText = document.getElementById('bubbletext');
+  if (!scene || !moon) return;
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+  const spin = () => {
+    if (moonSpeed) {
+      moonAngle += moonSpeed;
+      moon.setAttribute('transform', `rotate(${moonAngle.toFixed(2)} ${240} ${302})`);
+    }
+    rafId = requestAnimationFrame(spin);
+  };
+  spin();
+
+  const actions = [
+    ['walk', 4, () => 1800 + Math.random() * 2600,
+      () => { moonSpeed = (Math.random() < 0.5 ? -1 : 1) * (0.13 + Math.random() * 0.1); }],
+    ['idle', 3, () => 1400 + Math.random() * 2000, () => { moonSpeed = 0; }],
+    ['wave', 2, () => 2400, () => { moonSpeed = 0; }],
+    ['hop', 2, () => 1700, () => { moonSpeed = 0; }],
+    ['look', 2, () => 2700, () => { moonSpeed = 0; }],
+  ];
+  const bag = actions.flatMap(a => Array(a[1]).fill(a));
+
+  let last = '';
+  const next = () => {
+    let pick;
+    do { pick = bag[Math.floor(Math.random() * bag.length)]; }
+    while (pick[0] === last && Math.random() < 0.75);   // rarely repeat straight away
+    last = pick[0];
+    pick[3]();
+    scene.className = 'scene ' + pick[0];
+
+    // An emote now and then, more often when standing still.
+    if (bubble && Math.random() < (pick[0] === 'walk' ? 0.12 : 0.45)) {
+      bubbleText.textContent = EMOTES[Math.floor(Math.random() * EMOTES.length)];
+      bubble.classList.remove('show');
+      void bubble.getBoundingClientRect();
+      bubble.classList.add('show');
+    }
+    sceneTimer = setTimeout(next, pick[2]());
+  };
+  next();
+}
+
 function renderAsk() {
   const s = DATA.stats;
   const examples = ['tAcw', 'milliseconds', 'wrapUpCode', 'cpf', 'service level'];
   return `<div class="mission">
-    <div class="stage">
-      <div class="sun"></div>
-      <div class="orbit"></div><div class="orbit two"></div>
-      ${ASTRONAUT.replace('class="naut"', 'class="naut-big"')}
-      <svg class="rock" viewBox="0 0 64 64" aria-hidden="true">
-        <defs><radialGradient id="rk" cx="34%" cy="30%">
-          <stop offset="0" stop-color="#7f8aa6"/><stop offset="1" stop-color="#2a3040"/>
-        </radialGradient></defs>
-        <circle cx="32" cy="32" r="22" fill="url(#rk)"/>
-        <circle cx="25" cy="26" r="4" fill="#1f2431" opacity=".55"/>
-        <circle cx="38" cy="37" r="5.5" fill="#1f2431" opacity=".45"/>
-      </svg>
-    </div>
-
+    ${moonScene()}
     <h2>${T().askTitle}</h2>
     <p class="lede">${T().missionLede}</p>
-    <div class="counts">${s.tables} ${T().mTables} · ${s.columns} ${T().mColumns}
-      · ${DOCS.length} ${T().mDocs} · ${s.piiColumns} ${T().mPii}</div>
+    <div class="counts">${s.tables} ${T().mTables} \u00b7 ${s.columns} ${T().mColumns}
+      \u00b7 ${DOCS.length} ${T().mDocs} \u00b7 ${s.piiColumns} ${T().mPii}</div>
 
     <div class="askbox">
       <form id="askform" autocomplete="off">
@@ -1258,11 +1432,12 @@ function applyLanguage() {
 }
 
 function render() {
+  stopScene();
   applyLanguage();
   renderNav();
   if (current.view === 'table') renderTable(current.key);
   else if (current.view === 'doc') renderDoc(current.key);
-  else if (current.view === 'ask') content.innerHTML = renderAsk();
+  else if (current.view === 'ask') { content.innerHTML = renderAsk(); startScene(); }
   else renderOverview();
   document.getElementById('main').scrollTop = 0;
   document.title = (current.key ? current.key + ' — ' : '') + DATA.catalog + ' catalog documentation';
