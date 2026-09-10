@@ -670,21 +670,25 @@ body::after {
   .rig, .limb, .head, .dust, .bubble, .moon-spin { animation: none !important; }
 }
 
-.mission h2 {
-  text-align: center; font-size: 30px; letter-spacing: -.015em; margin: 0 0 10px;
+/* Two columns while there is room. Centred, the page was a narrow ribbon of
+   content down the middle with the scene floating over a lot of nothing; side by
+   side, the character has somewhere to be and the question sits where the eye
+   already is. */
+.mission { padding: 4px 0 40px; }
+.split {
+  display: grid; grid-template-columns: minmax(300px, 420px) 1fr; gap: 30px;
+  align-items: center; margin-bottom: 30px;
 }
-.mission .lede {
-  text-align: center; color: var(--muted); font-size: 15px; max-width: 560px;
-  margin: 0 auto 8px;
-}
+.split .scene { margin: 0; height: 300px; }
+.mission h2 { font-size: 32px; letter-spacing: -.02em; margin: 0 0 10px; line-height: 1.15; }
+.mission .lede { color: var(--muted); font-size: 15px; margin: 0 0 14px; max-width: 46ch; }
 .mission .counts {
-  text-align: center; color: var(--faint); font-family: var(--mono); font-size: 11.5px;
-  letter-spacing: .05em; margin-bottom: 26px;
+  color: var(--faint); font-family: var(--mono); font-size: 11.5px;
+  letter-spacing: .04em; margin-bottom: 18px;
 }
-.askbox { max-width: 660px; margin: 0 auto; }
 .askbox form { display: flex; gap: 9px; }
 .askbox input {
-  flex: 1; padding: 13px 16px; font-size: 15px; border-radius: 10px;
+  flex: 1; min-width: 0; padding: 13px 16px; font-size: 15px; border-radius: 10px;
   background: rgba(10,11,14,.72); border: 1px solid var(--line); color: var(--text);
   font-family: inherit;
 }
@@ -694,14 +698,40 @@ body::after {
   background: var(--accent); border: 1px solid var(--accent); color: #07211d; font-weight: 600;
 }
 .askbox button:hover { filter: brightness(1.08); }
-.suggest { display: flex; gap: 7px; flex-wrap: wrap; justify-content: center; margin: 14px 0 6px; }
+.suggest { display: flex; gap: 7px; flex-wrap: wrap; margin: 12px 0 0; }
 .suggest button {
   background: rgba(255,255,255,.03); border: 1px solid var(--line); color: var(--muted);
   border-radius: 20px; padding: 5px 13px; font-size: 12.5px; cursor: pointer; font-family: inherit;
 }
 .suggest button:hover { border-color: var(--accent); color: var(--accent); }
-.suggest button.facet { border-style: dashed; }
-.mission .answer { max-width: 660px; margin: 20px auto 0; }
+
+/* Landing on an empty results pane is what made the page feel unfinished. Until a
+   question is asked, the space carries what there is to ask about. */
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 11px; }
+.tile {
+  text-align: left; background: rgba(255,255,255,.022); border: 1px solid var(--line);
+  border-radius: 10px; padding: 13px 15px; cursor: pointer; font-family: inherit;
+  color: var(--text); transition: border-color .15s, background .15s;
+}
+.tile:hover { border-color: var(--accent); background: rgba(94,234,212,.05); }
+.tile .t { font-family: var(--mono); font-size: 13px; margin-bottom: 3px; }
+.tile .d { color: var(--faint); font-size: 12px; line-height: 1.45; }
+.tile .n { color: var(--accent); font-variant-numeric: tabular-nums; }
+.tile.warn .n { color: var(--warn); }
+.tile.pii .n { color: var(--pii); }
+
+.mission .answer { margin-top: 4px; }
+
+@media (max-width: 940px) {
+  .split { grid-template-columns: 1fr; gap: 8px; }
+  /* The label and its hint sat side by side and wrapped into each other. */
+  .mission .sec { flex-direction: column; gap: 2px; }
+  .split .scene { height: 240px; }
+  .mission h2, .mission .lede, .mission .counts { text-align: center; }
+  .mission .lede { margin-left: auto; margin-right: auto; }
+  .suggest { justify-content: center; }
+}
+
 
 .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 9px; }
 .chips button {
@@ -897,6 +927,13 @@ const STR = {
     mDocs: 'source documents',
     mPii: 'carrying personal data',
     sceneAlt: 'A small astronaut walking on a moon.',
+    tileGrounds: 'grounds',
+    tileUnused: 'no table mapped to it',
+    mTable1: 'table',
+    tileHint: 'the documentation each description was grounded in',
+    tilePii: 'columns a masking policy has to cover',
+    tileOrphan: 'tables nothing has queried',
+    tileDead: 'always null, or one value on every row',
     askDocs: 'Also in:',
     chipPii: 'personal data', chipOrphan: 'never read', chipDead: 'dead columns',
     askFacetNote: 'A filter over what the crawler recorded, not a search.',
@@ -1067,6 +1104,7 @@ const FACETS = {
 
 function renderFacet(name) {
   const box = document.getElementById('answer');
+  showingAnswer(true);
   const rows = DATA.tables.flatMap(FACETS[name]);
   box.innerHTML = `<div class="answer">${rows.map(h => `<div class="hit">
       <span class="where" data-go="${esc(h.table)}">${esc(h.table)}${h.column ? '.' + esc(h.column) : ''}</span>
@@ -1074,9 +1112,15 @@ function renderFacet(name) {
     <div class="note">${T().askFacetNote}</div></div>`;
 }
 
+function showingAnswer(on) {
+  const browse = document.getElementById('browse');
+  if (browse) browse.hidden = on;
+}
+
 function renderAnswer(query) {
   const box = document.getElementById('answer');
   if (!box) return;
+  showingAnswer(true);
   const {columns, docs} = askLocally(query);
   if (!columns.length && !docs.length) {
     box.innerHTML = `<div class="answer"><div class="none">${T().askNone}</div></div>`;
@@ -1096,10 +1140,10 @@ function renderAnswer(query) {
 // a sprite that only translates reads as sliding, and the difference between that
 // and a walk lives entirely in the hips and shoulders.
 function moonScene() {
-  const MX = 240, MY = 302, MR = 126;   // moon centre and radius, in view units
+  const MX = 240, MY = 190, MR = 64;   // moon centre and radius, in view units
   const craters = [
-    [-58, -78, 13], [42, -92, 9], [88, -34, 16], [-96, -18, 10],
-    [8, -122, 7], [-26, -104, 5], [66, 22, 12], [-72, 34, 8],
+    [-29, -39, 6.5], [21, -46, 4.5], [44, -17, 8], [-48, -9, 5],
+    [4, -58, 3.5], [-13, -52, 2.6], [33, 11, 6], [-36, 17, 4],
   ].map(([dx, dy, r]) =>
     `<circle cx="${MX + dx}" cy="${MY + dy}" r="${r}" fill="#0f1319" opacity=".55"/>
      <circle cx="${MX + dx - r * .18}" cy="${MY + dy - r * .18}" r="${r * .82}" fill="#20262f" opacity=".7"/>`
@@ -1107,14 +1151,10 @@ function moonScene() {
 
   return `<div class="scene" id="scene">
     <div class="corona"></div>
-    <svg viewBox="0 0 480 262" role="img" aria-label="${T().sceneAlt}">
+    <svg viewBox="90 0 300 270" role="img" aria-label="${T().sceneAlt}">
       <defs>
         <linearGradient id="suit" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#ccd3e0"/>
-        </linearGradient>
-        <linearGradient id="fade" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stop-color="#131418" stop-opacity="0"/>
-          <stop offset="100%" stop-color="#131418" stop-opacity=".92"/>
         </linearGradient>
         <linearGradient id="glass" x1="0" y1="0" x2="0.7" y2="1">
           <stop offset="0" stop-color="#cfeef0" stop-opacity=".34"/>
@@ -1130,7 +1170,7 @@ function moonScene() {
         <circle cx="${MX}" cy="${MY}" r="${MR}" fill="url(#moonface)"/>
         ${craters}
       </g>
-      <ellipse cx="${MX}" cy="${MY - MR + 3}" rx="30" ry="4.5" fill="#000" opacity=".33"/>
+      <ellipse cx="${MX}" cy="${MY - MR + 3}" rx="26" ry="4" fill="#000" opacity=".3"/>
 
       <g transform="translate(${MX} ${MY - MR + 1})">
         <circle class="dust" cx="-12" cy="-1.5" r="1.7" fill="#8b929e" style="--dx:-8px"/>
@@ -1196,7 +1236,6 @@ function moonScene() {
           </g></g>
         </g>
       </g>
-      <rect x="0" y="200" width="480" height="62" fill="url(#fade)"/>
     </svg>
   </div>`;
 }
@@ -1224,7 +1263,7 @@ function startScene() {
   const spin = () => {
     if (moonSpeed) {
       moonAngle += moonSpeed;
-      moon.setAttribute('transform', `rotate(${moonAngle.toFixed(2)} ${240} ${302})`);
+      moon.setAttribute('transform', `rotate(${moonAngle.toFixed(2)} ${240} ${190})`);
     }
     rafId = requestAnimationFrame(spin);
   };
@@ -1261,29 +1300,62 @@ function startScene() {
   next();
 }
 
+function renderBrowse() {
+  const bySystem = {};
+  DATA.tables.forEach(t => {
+    const sys = t.provenance && t.provenance.system;
+    if (sys) (bySystem[sys] ??= []).push(t);
+  });
+
+  const docTiles = DOCS.map(d => {
+    const n = (bySystem[d.id] || []).length;
+    return `<button class="tile" data-doc="${esc(d.id)}">
+      <div class="t">§ ${esc(d.id)}</div>
+      <div class="d">${n
+        ? `${T().tileGrounds} <span class="n">${n}</span> ${n === 1 ? T().mTable1 : T().mTables}`
+        : T().tileUnused}</div></button>`;
+  }).join('');
+
+  const s = DATA.stats;
+  const facetTiles = [
+    ['pii', 'pii', s.piiColumns, T().chipPii, T().tilePii],
+    ['orphan', 'warn', s.orphans, T().chipOrphan, T().tileOrphan],
+    ['dead', 'warn', s.dead, T().chipDead, T().tileDead],
+  ].map(([facet, tone, n, label, why]) => `<button class="tile ${tone}" data-facet="${facet}">
+      <div class="t"><span class="n">${n}</span> ${esc(label)}</div>
+      <div class="d">${why}</div></button>`).join('');
+
+  return `<div id="browse">
+    <div class="sec"><h3>${T().sources}</h3>
+      <span class="hint">${T().tileHint}</span></div>
+    <div class="tiles">${docTiles}</div>
+    <div class="sec"><h3>${T().findings}</h3></div>
+    <div class="tiles">${facetTiles}</div>
+  </div>`;
+}
+
 function renderAsk() {
   const s = DATA.stats;
   const examples = ['tAcw', 'milliseconds', 'wrapUpCode', 'cpf', 'service level'];
   return `<div class="mission">
-    ${moonScene()}
-    <h2>${T().askTitle}</h2>
-    <p class="lede">${T().missionLede}</p>
-    <div class="counts">${s.tables} ${T().mTables} \u00b7 ${s.columns} ${T().mColumns}
-      \u00b7 ${DOCS.length} ${T().mDocs} \u00b7 ${s.piiColumns} ${T().mPii}</div>
-
-    <div class="askbox">
-      <form id="askform" autocomplete="off">
-        <input id="askq" type="search" placeholder="${T().askPlaceholder}">
-        <button type="submit">${T().askGo}</button>
-      </form>
-      <div class="suggest">
-        ${examples.map(q => `<button data-q="${esc(q)}">${esc(q)}</button>`).join('')}
-        <button class="facet" data-facet="pii">${T().chipPii}</button>
-        <button class="facet" data-facet="orphan">${T().chipOrphan}</button>
-        <button class="facet" data-facet="dead">${T().chipDead}</button>
+    <div class="split">
+      ${moonScene()}
+      <div class="askbox">
+        <h2>${T().askTitle}</h2>
+        <p class="lede">${T().missionLede}</p>
+        <div class="counts">${s.tables} ${T().mTables} \u00b7 ${s.columns} ${T().mColumns}
+          \u00b7 ${DOCS.length} ${T().mDocs} \u00b7 ${s.piiColumns} ${T().mPii}</div>
+        <form id="askform" autocomplete="off">
+          <input id="askq" type="search" placeholder="${T().askPlaceholder}">
+          <button type="submit">${T().askGo}</button>
+        </form>
+        <div class="suggest">
+          ${examples.map(q => `<button data-q="${esc(q)}">${esc(q)}</button>`).join('')}
+        </div>
       </div>
-      <div id="answer"></div>
     </div>
+    <div id="answer"></div>
+    ${renderBrowse()}
   </div>`;
 }
 
