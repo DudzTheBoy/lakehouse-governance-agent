@@ -26,12 +26,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from dbio import connect, load_env
+# The health score is computed by report.py. Reimplementing the formula here would
+# let the site and the report drift apart while both claim to be authoritative.
+from report import gather as gather_for_score
+from report import scores as compute_scores
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DOCS_ROOT = REPO_ROOT / "docs"
 DEFAULT_CATALOG = "governance_lab"
 META = "meta"
 ORPHAN_DAYS = 90
+REPO_URL = "https://github.com/DudzTheBoy/lakehouse-governance-agent"
 
 
 # --------------------------------------------------------------------------- data
@@ -55,11 +60,24 @@ def collect(catalog: str) -> dict:
                 cursor,
                 f"""SELECT run_id, model, tables_processed, columns_documented,
                            prompt_tokens, completion_tokens, est_cost_usd, applied,
-                           unix_timestamp(finished_at) - unix_timestamp(started_at)
+                           unix_timestamp(finished_at) - unix_timestamp(started_at),
+                           scan_id
                     FROM {catalog}.{META}.llm_runs
                     WHERE applied = true ORDER BY started_at DESC LIMIT 1""",
             )
             run = run_rows[0] if run_rows else None
+
+            # The applied run was computed from the scan taken before it wrote
+            # anything, so that scan is the "before" state, for free.
+            before_score = after_score = None
+            after_score = compute_scores(gather_for_score(cursor, catalog, scan_id, None))["overall"]
+            if run and run[9] and run[9] != scan_id:
+                try:
+                    before_score = compute_scores(
+                        gather_for_score(cursor, catalog, run[9], None)
+                    )["overall"]
+                except Exception:
+                    before_score = None
 
             tables = fetch(
                 cursor,
@@ -113,7 +131,19 @@ def collect(catalog: str) -> dict:
         "columns": columns,
         "provenance": provenance,
         "llm_pii": llm_pii,
+        "before_score": before_score,
+        "after_score": after_score,
     }
+
+
+def human_bytes(value) -> str:
+    if not value:
+        return "-"
+    size = float(value)
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if size < 1024 or unit == "TB":
+            return f"{size:.0f} {unit}" if unit == "B" else f"{size:.1f} {unit}"
+        size /= 1024
 
 
 def shape(raw: dict) -> dict:
@@ -165,6 +195,49 @@ def shape(raw: dict) -> dict:
             }
         )
 
+    # Coverage per schema, so a gap is visible as a short bar rather than as a
+    # number the reader has to compare against another number.
+    schemas: dict = {}
+    for table in tables:
+        entry = schemas.setdefault(table["schema"], {"schema": table["schema"], "columns": 0,
+                                                     "documented": 0, "tables": 0})
+        entry["tables"] += 1
+        entry["columns"] += len(table["columns"])
+        entry["documented"] += sum(1 for c in table["columns"] if c["comment"])
+    schema_coverage = sorted(schemas.values(), key=lambda s: -s["columns"])
+
+    # Findings ranked by what they oblige someone to do, not by how many there are.
+    findings = []
+    for table in tables:
+        if table["piiCount"]:
+            findings.append({
+                "severity": "high", "table": table["key"],
+                "what": f"{table['piiCount']} personal-data column"
+                        f"{'s' if table['piiCount'] > 1 else ''}",
+                "why": "needs a masking policy and a retention decision",
+            })
+        if table["orphan"]:
+            findings.append({
+                "severity": "medium", "table": table["key"],
+                "what": "never read",
+                "why": f"{human_bytes(table['sizeBytes'])} nobody has queried",
+            })
+        if table["deadCount"]:
+            findings.append({
+                "severity": "low", "table": table["key"],
+                "what": f"{table['deadCount']} dead column"
+                        f"{'s' if table['deadCount'] > 1 else ''}",
+                "why": "always null or a single repeated value",
+            })
+        if table["fragmented"]:
+            findings.append({
+                "severity": "low", "table": table["key"],
+                "what": "fragmented",
+                "why": f"{table['numFiles']} files for {human_bytes(table['sizeBytes'])}",
+            })
+    order = {"high": 0, "medium": 1, "low": 2}
+    findings.sort(key=lambda f: (order[f["severity"]], f["table"]))
+
     run = raw["run"]
     total_columns = sum(len(t["columns"]) for t in tables)
     documented = sum(1 for t in tables for c in t["columns"] if c["comment"])
@@ -173,7 +246,12 @@ def shape(raw: dict) -> dict:
         "catalog": raw["catalog"],
         "generatedAt": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
         "scanId": raw["scan_id"][:8],
+        "repoUrl": REPO_URL,
         "tables": tables,
+        "schemaCoverage": schema_coverage,
+        "findings": findings,
+        "beforeScore": round(raw["before_score"] * 100) if raw["before_score"] else None,
+        "afterScore": round(raw["after_score"] * 100) if raw["after_score"] else None,
         "stats": {
             "tables": len(tables),
             "columns": total_columns,
@@ -307,9 +385,13 @@ PAGE = """<!doctype html>
 <title>__CATALOG__ — catalog documentation</title>
 <style>
 :root {
-  --bg: #16171b; --sidebar: #101114; --surface: #1d1f24; --raised: #24272e;
-  --line: #2c2f37; --text: #dfe1e6; --muted: #8b909c; --faint: #636874;
-  --accent: #62d5c4; --pii: #f0a3a3; --warn: #e3bd7a; --ok: #8fce9b;
+  --bg: #131418; --sidebar: #0d0e11; --surface: #1a1c21; --raised: #22252b;
+  --line: #292c33; --line-soft: #1f2228;
+  --text: #e6e8ec; --muted: #9aa0ac; --faint: #6b7280;
+  --accent: #5eead4; --accent-dim: #1c3c39;
+  --pii: #f2a5a5; --pii-bg: #2a1c1e; --pii-line: #4d3336;
+  --warn: #e8c37f; --warn-bg: #262016; --warn-line: #4a3f28;
+  --ok: #86d99b;
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 }
 * { box-sizing: border-box; }
@@ -391,6 +473,66 @@ table.cols tr:hover td { background: var(--surface); }
 .card .l { color: var(--faint); font-size: 11.5px; margin-top: 2px; }
 .card.good .n { color: var(--ok); } .card.warn .n { color: var(--warn); } .card.pii .n { color: var(--pii); }
 
+/* hero */
+.hero { padding: 8px 0 30px; border-bottom: 1px solid var(--line); margin-bottom: 30px; }
+.hero .eyebrow {
+  font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 14px;
+}
+.hero h2 { font-size: 27px; letter-spacing: -.01em; margin-bottom: 10px; }
+.hero .lede { color: var(--muted); font-size: 15px; max-width: 620px; margin-bottom: 26px; }
+.score { display: flex; align-items: center; gap: 18px; margin-bottom: 8px; flex-wrap: wrap; }
+.score .v { font-size: 52px; font-weight: 650; line-height: 1; font-variant-numeric: tabular-nums; }
+.score .v.was { color: var(--faint); font-size: 34px; font-weight: 500; }
+.score .v.now { color: var(--ok); }
+.score .arrow { color: var(--line); font-size: 22px; }
+.score .cap { color: var(--faint); font-size: 12px; font-family: var(--mono); }
+.runline { color: var(--muted); font-size: 13px; margin-top: 16px; }
+.runline strong { color: var(--text); font-variant-numeric: tabular-nums; }
+
+/* section headings */
+.sec { margin: 34px 0 14px; display: flex; align-items: baseline; gap: 10px; }
+.sec h3 {
+  margin: 0; font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--faint); font-weight: 600;
+}
+.sec .hint { color: var(--faint); font-size: 12px; }
+
+/* coverage bars */
+.cov { display: grid; grid-template-columns: 130px 1fr auto; gap: 10px 14px; align-items: center; }
+.cov .name { font-family: var(--mono); font-size: 12.5px; color: var(--muted); }
+.cov .track { background: var(--raised); height: 7px; border-radius: 4px; overflow: hidden; }
+.cov .fill { background: var(--accent); height: 100%; border-radius: 4px; }
+.cov .fill.partial { background: var(--warn); }
+.cov .val { font-family: var(--mono); font-size: 12px; color: var(--faint); white-space: nowrap; }
+
+/* findings */
+.find { width: 100%; border-collapse: collapse; font-size: 13px; }
+.find td { padding: 8px 10px; border-bottom: 1px solid var(--line-soft); }
+.find tr:hover td { background: var(--surface); }
+.find .sev {
+  font-family: var(--mono); font-size: 10.5px; text-transform: uppercase;
+  letter-spacing: .06em; width: 62px;
+}
+.find .sev.high { color: var(--pii); } .find .sev.medium { color: var(--warn); }
+.find .sev.low { color: var(--faint); }
+.find .tbl { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; }
+.find .tbl a { color: var(--muted); text-decoration: none; }
+.find .tbl a:hover { color: var(--accent); }
+.find .why { color: var(--faint); }
+
+/* sidebar footer + mobile */
+.sidefoot {
+  border-top: 1px solid var(--line); padding: 11px 16px; font-size: 11.5px; color: var(--faint);
+}
+.sidefoot a { color: var(--muted); text-decoration: none; }
+.sidefoot a:hover { color: var(--accent); }
+.burger {
+  display: none; position: fixed; top: 12px; left: 12px; z-index: 20;
+  background: var(--raised); border: 1px solid var(--line); color: var(--text);
+  border-radius: 6px; width: 34px; height: 34px; font-size: 15px; cursor: pointer;
+}
+
 .doc h1, .doc h2 { border-bottom: 1px solid var(--line); padding-bottom: 6px; }
 .doc h1 { font-size: 20px; margin-top: 0; } .doc h2 { font-size: 16px; margin-top: 28px; }
 .doc h3 { font-size: 14px; margin-top: 22px; color: var(--muted); }
@@ -405,15 +547,23 @@ table.cols tr:hover td { background: var(--surface); }
 .doc ul { padding-left: 20px; } .doc li { margin: 3px 0; }
 .note { color: var(--faint); font-size: 12px; margin-top: 34px; padding-top: 14px; border-top: 1px solid var(--line); }
 
-@media (max-width: 780px) {
+@media (max-width: 820px) {
   body { grid-template-columns: 1fr; }
-  .sidebar { position: fixed; z-index: 10; width: 264px; height: 100%; transform: translateX(-100%); transition: transform .2s; }
-  .sidebar.open { transform: none; }
-  .main { padding: 20px; }
+  .sidebar {
+    position: fixed; z-index: 15; width: 264px; height: 100%;
+    transform: translateX(-100%); transition: transform .2s;
+  }
+  .sidebar.open { transform: none; box-shadow: 0 0 40px rgba(0,0,0,.6); }
+  .burger { display: block; }
+  .main { padding: 58px 20px 60px; }
+  .cov { grid-template-columns: 100px 1fr auto; }
+  .score .v { font-size: 42px; }
+  .find .why { display: none; }
 }
 </style>
 </head>
 <body>
+<button class="burger" id="burger" aria-label="Toggle navigation">☰</button>
 <nav class="sidebar" id="sidebar">
   <div class="brand">
     <h1>__CATALOG__</h1>
@@ -421,6 +571,7 @@ table.cols tr:hover td { background: var(--surface); }
   </div>
   <div class="search"><input id="q" type="search" placeholder="Search tables and columns" autocomplete="off"></div>
   <div class="nav" id="nav"></div>
+  <div class="sidefoot">Generated by <a href="__REPO__" target="_blank" rel="noopener">lakehouse-governance-agent</a></div>
 </nav>
 <main class="main" id="main"><div class="wrap" id="content"></div></main>
 <script id="payload" type="application/json">__DATA__</script>
@@ -476,30 +627,64 @@ function renderNav() {
 function renderOverview() {
   const s = DATA.stats, r = DATA.run;
   const pct = s.columns ? Math.round(100 * s.documented / s.columns) : 0;
+
+  const scoreBlock = DATA.afterScore === null ? '' : `
+    <div class="score">
+      ${DATA.beforeScore !== null ? `<div class="v was">${DATA.beforeScore}</div>
+        <div class="arrow">&rarr;</div>` : ''}
+      <div class="v now">${DATA.afterScore}</div>
+      <div class="cap">catalog health score${DATA.beforeScore !== null ? ',<br>before and after one run' : ''}</div>
+    </div>`;
+
+  const coverage = DATA.schemaCoverage.map(c => {
+    const p = c.columns ? Math.round(100 * c.documented / c.columns) : 0;
+    return `<div class="name">${esc(c.schema)}</div>
+      <div class="track"><div class="fill ${p < 100 ? 'partial' : ''}" style="width:${p}%"></div></div>
+      <div class="val">${p}% · ${c.columns} cols</div>`;
+  }).join('');
+
+  const findings = DATA.findings.map(f => `<tr>
+      <td class="sev ${f.severity}">${f.severity}</td>
+      <td class="tbl"><a href="#table/${encodeURIComponent(f.table)}">${esc(f.table)}</a></td>
+      <td>${esc(f.what)}</td>
+      <td class="why">${esc(f.why)}</td>
+    </tr>`).join('');
+
   content.innerHTML = `
-    <div class="crumb">${esc(DATA.catalog)}</div>
-    <h2>Catalog documentation</h2>
-    <div class="meta"><span>${s.tables} tables</span><span>${s.columns} columns</span>
-      <span>generated ${esc(DATA.generatedAt)}</span></div>
-    <div class="cards">
+    <div class="hero">
+      <div class="eyebrow">${esc(DATA.catalog)}</div>
+      <h2>Catalog documentation</h2>
+      <p class="lede">Every description here was generated from the data <em>and</em> from the
+        documentation of the system each table came from. Open a table to see which passages
+        produced its descriptions.</p>
+      ${scoreBlock}
+      ${r ? `<div class="runline">
+        <strong>${r.comments} comments</strong> written to Unity Catalog across ${r.tables} tables
+        in <strong>${r.seconds}s</strong>, using
+        <strong>${(r.promptTokens + r.completionTokens).toLocaleString()}</strong> tokens —
+        <strong>$${r.cost.toFixed(4)}</strong> at list price for <code>${esc(r.model)}</code>.
+        Modelled, not billed: the run was made on a free tier that charges nothing.</div>` : ''}
+    </div>
+
+    <div class="sec"><h3>Coverage by schema</h3></div>
+    <div class="cov">${coverage}</div>
+
+    <div class="sec"><h3>Findings</h3>
+      <span class="hint">${DATA.findings.length} open, ranked by what they oblige someone to do</span></div>
+    <table class="find"><tbody>${findings}</tbody></table>
+
+    <div class="cards" style="margin-top:26px">
       <div class="card good"><div class="n">${pct}%</div><div class="l">columns documented</div></div>
       <div class="card pii"><div class="n">${s.piiColumns}</div><div class="l">personal-data columns</div></div>
       <div class="card warn"><div class="n">${s.orphans}</div><div class="l">never read</div></div>
       <div class="card warn"><div class="n">${s.dead}</div><div class="l">dead columns</div></div>
       <div class="card warn"><div class="n">${s.fragmented}</div><div class="l">fragmented tables</div></div>
     </div>
-    ${r ? `<div class="desc">Every description on this site was generated by
-      <code>${esc(r.model)}</code> and written back to Unity Catalog:
-      <strong>${r.comments} comments</strong> across ${r.tables} tables in ${r.seconds}s,
-      using ${(r.promptTokens + r.completionTokens).toLocaleString()} tokens
-      — <strong>$${r.cost.toFixed(4)}</strong> at list price.
-      That figure is modelled, not billed: the run was made on a free tier that charges nothing.</div>` : ''}
-    <p style="color:var(--muted)">Descriptions are grounded in the documentation of the system each table
-    came from. Open any table to see which passages produced its descriptions, and follow them into the
-    source documents in the sidebar.</p>
+
     <div class="note">A dot beside a table marks personal data
       (<span class="dot pii"></span>) or a table nothing has read (<span class="dot orphan"></span>).
-      This is a snapshot of scan ${esc(DATA.scanId)}, not a live view.</div>`;
+      The score stops short of 100 on purpose: what remains are not documentation problems but
+      decisions a person has to make. Snapshot of scan ${esc(DATA.scanId)}, not a live view.</div>`;
 }
 
 function renderTable(key) {
@@ -555,21 +740,41 @@ function render() {
   else if (current.view === 'doc') renderDoc(current.key);
   else renderOverview();
   document.getElementById('main').scrollTop = 0;
+  document.title = (current.key ? current.key + ' — ' : '') + DATA.catalog + ' catalog documentation';
 }
 
+// The address bar is the state. A documentation portal whose pages cannot be linked
+// to is a slideshow: anyone who finds something useful has no way to point at it.
+function fromHash() {
+  const raw = decodeURIComponent(location.hash.replace(/^#/, ''));
+  const [view, ...rest] = raw.split('/');
+  const key = rest.join('/');
+  return (view === 'table' || view === 'doc') && key ? {view, key} : {view: 'overview'};
+}
+function go(next, push = true) {
+  current = next;
+  const hash = next.view === 'overview' ? '' : `#${next.view}/${encodeURIComponent(next.key)}`;
+  if (push && location.hash !== hash) history.pushState(null, '', hash || location.pathname);
+  render();
+  sidebar.classList.remove('open');
+}
+
+const sidebar = document.getElementById('sidebar');
 nav.addEventListener('click', e => {
   const b = e.target.closest('.item');
-  if (!b) return;
-  current = {view: b.dataset.view, key: b.dataset.key};
-  render();
+  if (b) go({view: b.dataset.view, key: b.dataset.key});
 });
 content.addEventListener('click', e => {
-  const p = e.target.closest('.passage');
-  if (!p) return;
-  current = {view: 'doc', key: p.dataset.doc};
-  render();
+  const passage = e.target.closest('.passage');
+  if (passage) return go({view: 'doc', key: passage.dataset.doc});
+  const link = e.target.closest('a[href^="#table/"]');
+  if (link) { e.preventDefault(); go({view: 'table', key: decodeURIComponent(link.hash.slice(7))}); }
 });
 document.getElementById('q').addEventListener('input', e => { filter = e.target.value; renderNav(); });
+document.getElementById('burger').addEventListener('click', () => sidebar.classList.toggle('open'));
+window.addEventListener('popstate', () => { current = fromHash(); render(); });
+
+current = fromHash();
 render();
 </script>
 </body>
@@ -585,6 +790,7 @@ def build(catalog: str, destination: Path) -> None:
         PAGE.replace("__CATALOG__", html.escape(catalog))
         .replace("__SCAN__", html.escape(data["scanId"]))
         .replace("__GENERATED__", html.escape(data["generatedAt"]))
+        .replace("__REPO__", html.escape(REPO_URL))
         .replace("__DATA__", json.dumps(data).replace("</", "<\\/"))
         .replace("__DOCS__", json.dumps(docs).replace("</", "<\\/"))
     )
