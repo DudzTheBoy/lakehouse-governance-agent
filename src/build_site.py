@@ -631,7 +631,7 @@ body::after {
 .limb { transform-box: fill-box; }
 .arm-l, .arm-r { transform-origin: 50% 10%; }
 .leg-l, .leg-r { transform-origin: 50% 7%; }
-.head { transform-origin: 50% 96%; }
+.head { transform-box: fill-box; transform-origin: 50% 96%; }
 
 @keyframes stepA { 0%,100% { transform: translateY(0) rotate(3deg); } 50% { transform: translateY(-3.4px) rotate(-3deg); } }
 @keyframes stepB { 0%,100% { transform: translateY(-3.4px) rotate(-3deg); } 50% { transform: translateY(0) rotate(3deg); } }
