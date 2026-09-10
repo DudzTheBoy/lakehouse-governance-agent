@@ -4,7 +4,6 @@ import os
 from datetime import date, datetime
 from pathlib import Path
 
-from databricks import sql
 from dotenv import load_dotenv
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -22,6 +21,11 @@ def load_env() -> None:
 
 
 def connect():
+    # Imported here rather than at module scope so that importing anything from this
+    # package does not drag in the SQL driver. The classifiers in crawler.py are pure
+    # functions, and their tests should not need a database client installed to run.
+    from databricks import sql
+
     load_env()
     return sql.connect(
         server_hostname=os.environ["DATABRICKS_HOST"].removeprefix("https://").rstrip("/"),

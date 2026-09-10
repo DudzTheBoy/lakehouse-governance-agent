@@ -1,0 +1,29 @@
+# The classifier and retrieval tests need no warehouse and no API key, so CI runs
+# them without a single secret. That is a property worth keeping: the moment tests
+# need credentials, they stop running on every push.
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install test dependencies
+        # Only what the offline tests import. The Databricks and Groq clients are
+        # not needed to exercise the classifiers or documentation retrieval.
+        run: pip install pytest python-dotenv
+
+      - name: Run tests
+        run: pytest tests -q

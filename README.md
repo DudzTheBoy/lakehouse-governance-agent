@@ -7,6 +7,13 @@ system the data came from.
 
 It runs on Databricks Free Edition, against a SQL Warehouse, with no cluster.
 
+[![tests](https://github.com/DudzTheBoy/lakehouse-governance-agent/actions/workflows/tests.yml/badge.svg)](https://github.com/DudzTheBoy/lakehouse-governance-agent/actions/workflows/tests.yml)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+**[Browse the documented catalog &rarr;](https://dudztheboy.github.io/lakehouse-governance-agent/)**
+
+[![The documentation portal](docs/screenshots/overview.png)](https://dudztheboy.github.io/lakehouse-governance-agent/)
+
 ---
 
 ## Results
@@ -104,6 +111,57 @@ invented descriptions is worse than an empty one, because nobody audits what loo
 finished.**
 
 ---
+
+## The portal
+
+A documented catalog nobody can open does not look like a documented catalog. The
+agent's output is published as a static site: every table, every column, every
+generated description, and the passages of source documentation that produced them.
+
+**[dudztheboy.github.io/lakehouse-governance-agent](https://dudztheboy.github.io/lakehouse-governance-agent/)**
+
+The provenance link is the reason it exists rather than being a dashboard. A reader
+can see that `tAbandon` says "milliseconds", click the passage that made it say so,
+and land in the Genesys field reference. That is the difference between a description
+you trust and one you merely accept.
+
+| | |
+|---|---|
+| ![A table with its provenance](docs/screenshots/table-genesys.png) | ![The source document it cites](docs/screenshots/source-doc.png) |
+
+One self-contained HTML file with the data embedded — no build step, no runtime
+dependency, no server. It opens from disk, serves from GitHub Pages, or travels as a
+single attachment. It is a snapshot, not a live view, and the page says so.
+
+Deliberately **not** a Databricks App: an App sits behind a workspace login, which is
+right for an internal tool and useless for anything a stranger should be able to open.
+
+```bash
+python src/build_site.py      # -> docs/index.html
+```
+
+## Two languages, one model call
+
+Descriptions are produced in English and Brazilian Portuguese in the same response,
+not in a second translation pass. The expensive part of the prompt — the profile, the
+samples, the retrieved documentation — is identical for both, so asking for both costs
+output tokens rather than a second round trip: **$0.0048 to $0.0062, up 29% for twice
+the coverage.**
+
+![The same table in Portuguese](docs/screenshots/table-genesys-pt.png)
+
+This is not localisation. A catalog in a multinational is read by people who do not
+share a language, and a description in a language the reader does not have is a
+description they will not check. The Portuguese carries the same facts, including
+units and derivation rules, and leaves identifiers alone: `wrapUpCode` stays
+`wrapUpCode`, and `F` is not turned into "final".
+
+Unity Catalog holds one `COMMENT` per object, so English is what is written to the
+catalog and Portuguese lives in `meta.llm_suggestions` and
+`meta.llm_table_descriptions`, where the portal reads it. Storing a language the
+catalog cannot hold is the point: the catalog serves one audience, the portal serves
+the rest. Source documents are never translated — they are the vendor's words, and
+rewriting them would defeat grounding.
 
 ## The five findings
 
